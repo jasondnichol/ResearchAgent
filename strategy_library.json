@@ -21,7 +21,33 @@
       "timeframe": "1H",
       "candle_lookback": 100,
       "check_interval": "5m"
+    },
+    {
+      "name": "ADX Momentum Thrust",
+      "regime": "TRENDING",
+      "indicators": [
+        "ADX (14)",
+        "+DI (14)",
+        "-DI (14)",
+        "RSI (14)",
+        "ATR (14)",
+        "SMA (50)"
+      ],
+      "win_rate": 0.50,
+      "profit_factor": 1.92,
+      "total_pnl": 12.17,
+      "avg_win": 5.07,
+      "avg_loss": -2.64,
+      "risk_level": "Medium",
+      "date_added": "2026-02-23T16:38:00.000000",
+      "status": "APPROVED",
+      "code_file": "adx_momentum_strategy.py",
+      "backtest_file": "backtest_adx_trending_20260223_163836.json",
+      "notes": "4-year daily backtest, 10 trades, approved via Path B (trend-following). Trailing stop at 1.5x ATR from high watermark.",
+      "timeframe": "1H",
+      "candle_lookback": 100,
+      "check_interval": "5m"
     }
   ],
-  "last_updated": "2026-02-21T14:01:34.796922"
+  "last_updated": "2026-02-23T16:40:00.000000"
 }

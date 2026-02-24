@@ -1,9 +1,10 @@
-"""Integrated Strategy Switcher with Williams %R"""
+"""Integrated Strategy Switcher with Williams %R and ADX Momentum"""
 import json
 import time
 from datetime import datetime
 from market_regime import MarketRegimeDetector
 from williams_r_strategy import WilliamsRStrategy
+from adx_momentum_strategy import ADXMomentumStrategy
 from notify import send_telegram
 
 class IntegratedSwitcher:
@@ -20,6 +21,7 @@ class IntegratedSwitcher:
 
         # Initialize strategies
         self.williams_r = WilliamsRStrategy()
+        self.adx_momentum = ADXMomentumStrategy()
     
     def load_library(self):
         """Load strategy library"""
@@ -179,6 +181,8 @@ class IntegratedSwitcher:
         # 3. Generate signal
         if strategy['name'] == 'Williams %R Mean Reversion':
             signal = self.williams_r.generate_signal('BTC-USD')
+        elif strategy['name'] == 'ADX Momentum Thrust':
+            signal = self.adx_momentum.generate_signal('BTC-USD')
         else:
             signal = {'signal': 'HOLD', 'reason': 'Strategy not implemented'}
 
