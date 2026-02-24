@@ -9,9 +9,10 @@ This is an **AI-powered crypto trading bot** that uses regime detection to autom
 - **Production:** Running 24/7 on AWS EC2 (184.72.84.30) in paper trading mode
 - **RANGING strategy:** Williams %R Mean Reversion (54.9% win rate, 2.09 PF) — Path A approved
 - **TRENDING strategy:** ADX Momentum Thrust (50% win rate, 1.92 PF) — Path B approved
-- **VOLATILE strategy:** None yet
+- **VOLATILE strategy:** Bollinger Band Mean Reversion (72.7% win rate, 1.65 PF) — Path A approved
 - **Market Regime:** TRENDING (ADX Momentum is active, holding — bearish DI)
 - **Regime classifier:** Unified `RegimeClassifier` in market_regime.py (Wilder's EWM ADX, 3 regimes)
+- **All 3 regimes covered** — bot has a strategy for every market condition
 - **Force-sell:** Bot auto-exits positions after 3 hours if regime changes and no strategy matches
 - **Telegram notifications:** Integrated and working (BUY/SELL/force-sell alerts + daily summary)
 - **Logging:** File logging to logs/trading.log and logs/trades.log
@@ -26,7 +27,7 @@ Claude API → Research Agent → Backtest → Strategy Library → Strategy Swi
 - **Strategy Switcher** (integrated_switcher.py) runs every 1 hour, picks strategy for current regime
 - **Williams %R** approved for RANGING markets (Path A: high win rate)
 - **ADX Momentum Thrust** approved for TRENDING markets (Path B: high profit factor, trailing stop)
-- **No approved VOLATILE strategy yet** — force-sell protects positions if regime shifts to VOLATILE
+- **BB Mean Reversion** approved for VOLATILE markets (Path A: high win rate, enters at lower BB)
 
 ## Key Files
 
@@ -36,12 +37,14 @@ Claude API → Research Agent → Backtest → Strategy Library → Strategy Swi
 | `market_regime.py` | `RegimeClassifier` (canonical) + `MarketRegimeDetector` |
 | `williams_r_strategy.py` | Williams %R signal generation (RANGING) |
 | `adx_momentum_strategy.py` | ADX Momentum signal generation (TRENDING) |
+| `bb_reversion_strategy.py` | BB Mean Reversion signal generation (VOLATILE) |
 | `notify.py` | Telegram notifications + file logging |
 | `daily_summary.py` | Sends daily trade summary via Telegram |
 | `strategy_library.py` | Strategy library management |
 | `strategy_library.json` | Approved strategies database |
 | `regime_backtester.py` | Regime-specific backtesting (90-day hourly) |
 | `backtest_adx_trending.py` | ADX Momentum 4-year daily backtest |
+| `backtest_bb_volatile.py` | BB Mean Reversion 4-year daily backtest |
 | `cycle_backtester_cached.py` | 4-year BTC data cache + regime classification |
 | `research_agent_v2.py` | Claude API strategy research |
 | `btc_4year_cache.json` | Cached 4-year historical data |
@@ -92,6 +95,14 @@ Claude API → Research Agent → Backtest → Strategy Library → Strategy Swi
 - Backtested: 10 trades, 50% win rate, 1.92 profit factor, +12.17% total P&L
 - Avg win: +5.07% | Avg loss: -2.64% | Trailing stop locks in gains
 
+### Bollinger Band Mean Reversion (APPROVED - VOLATILE markets, Path A)
+- Entry: Close below lower BB (SMA(20) - 2σ) + RSI(14) < 35 (oversold)
+- Exit: Price reaches SMA(20) middle band OR RSI > 70 OR 1.5x ATR stop loss
+- Regime exit: Force-close after 3 consecutive non-VOLATILE bars
+- Timeframe: 1H candles
+- Backtested: 11 trades, 72.7% win rate, 1.65 profit factor, +21.10% total P&L
+- Avg win: +6.69% | Avg loss: -10.80%
+
 ### Market Regime Detection (Unified RegimeClassifier)
 - Uses Wilder's EWM (alpha=1/period) for ATR, DI, and ADX smoothing
 - Calculates ADX(14), ATR(14), SMA(20), SMA(50)
@@ -111,11 +122,10 @@ Claude API → Research Agent → Backtest → Strategy Library → Strategy Swi
 
 ## Priorities / What's Next
 
-1. Monitor paper trading performance over 30 days
-2. Research and approve VOLATILE market strategies
-3. Add more trading pairs (ETH, etc.)
-4. Consider live trading with small capital ($500-1000) after validation
-5. Integrate findings into TradeSavvy dashboard
+1. Monitor paper trading performance over 30 days (all 3 regimes now covered)
+2. Add more trading pairs (ETH, etc.)
+3. Consider live trading with small capital ($500-1000) after validation
+4. Integrate findings into TradeSavvy dashboard
 
 ## Important Rules
 
