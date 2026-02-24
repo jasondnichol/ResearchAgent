@@ -1,0 +1,27 @@
+{
+  "strategies": [
+    {
+      "name": "Williams %R Mean Reversion",
+      "regime": "RANGING",
+      "indicators": [
+        "Williams %R (14)",
+        "SMA (21)"
+      ],
+      "win_rate": 0.549,
+      "profit_factor": 2.09,
+      "total_pnl": 7.15,
+      "avg_win": 0.49,
+      "avg_loss": -0.29,
+      "risk_level": "Medium",
+      "date_added": "2026-02-21T14:01:34.796919",
+      "status": "APPROVED",
+      "code_file": "strategies/ranging/williams_r.py",
+      "backtest_file": "backtest_ranging_20260221_135653.json",
+      "notes": "Tested on 1134 ranging periods, 51 trades, excellent profit factor",
+      "timeframe": "1H",
+      "candle_lookback": 100,
+      "check_interval": "5m"
+    }
+  ],
+  "last_updated": "2026-02-21T14:01:34.796922"
+}

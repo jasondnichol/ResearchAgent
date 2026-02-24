@@ -1,0 +1,26 @@
+# Secrets
+.env
+
+# Python
+__pycache__/
+*.pyc
+venv/
+
+# Cache and data files
+btc_4year_cache.json
+classified_regimes.json
+current_regime.json
+
+# Backtest result JSONs (timestamped)
+backtest_*.json
+research_*.json
+active_strategies.json
+
+# Logs
+logs/
+
+# IDE / Claude
+.claude/
+
+# Misc
+Stuff/
