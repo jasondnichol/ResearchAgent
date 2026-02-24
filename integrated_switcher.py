@@ -1,6 +1,7 @@
 """Integrated Strategy Switcher with Williams %R, ADX Momentum, and BB Reversion"""
 import json
 import time
+import requests
 from datetime import datetime
 from market_regime import MarketRegimeDetector
 from williams_r_strategy import WilliamsRStrategy
@@ -19,6 +20,12 @@ class IntegratedSwitcher:
         # Regime change tracking for force-sell
         self.current_regime = None
         self.non_matching_regime_count = 0
+
+        # Stop monitoring between hourly signals
+        self.stop_price = None
+        self.high_watermark = None
+        self.last_atr = None
+        self.active_strategy_name = None
 
         # Initialize strategies
         self.williams_r = WilliamsRStrategy()
@@ -92,7 +99,11 @@ class IntegratedSwitcher:
             
             self.position = None
             self.entry_price = 0
-        
+            self.stop_price = None
+            self.high_watermark = None
+            self.last_atr = None
+            self.active_strategy_name = None
+
         else:
             print(f"\n⚪ HOLD")
             print(f"   Reason: {signal['reason']}")
@@ -138,6 +149,74 @@ class IntegratedSwitcher:
 
         self.position = None
         self.entry_price = 0
+        self.stop_price = None
+        self.high_watermark = None
+        self.last_atr = None
+        self.active_strategy_name = None
+
+    def fetch_current_price(self, symbol='BTC-USD'):
+        """Lightweight price check — just current price, no candle history"""
+        url = f"https://api.exchange.coinbase.com/products/{symbol}/ticker"
+        response = requests.get(url, timeout=10)
+        data = response.json()
+        return float(data['price'])
+
+    def check_between_signals(self):
+        """Lightweight 5-min price check for stop loss monitoring"""
+        if not self.position:
+            return
+
+        try:
+            price = self.fetch_current_price()
+        except Exception as e:
+            print(f"   ⚠️  Price check failed: {e}")
+            return
+
+        current_pnl = ((price - self.entry_price) / self.entry_price) * 100
+        now = datetime.now().strftime('%H:%M:%S')
+
+        # Update trailing stop for ADX Momentum
+        if self.active_strategy_name == 'ADX Momentum Thrust' and self.high_watermark and self.last_atr:
+            if price > self.high_watermark:
+                self.high_watermark = price
+                self.stop_price = self.high_watermark - (1.5 * self.last_atr)
+
+        # Check stop loss
+        sell_reason = None
+        if self.stop_price and price <= self.stop_price:
+            sell_reason = f'Stop loss hit (${self.stop_price:,.2f}) — 5-min monitor'
+        # Emergency stop: 5% below entry regardless of strategy
+        elif price <= self.entry_price * 0.95:
+            sell_reason = f'Emergency stop (-5% from entry ${self.entry_price:,.2f})'
+
+        if sell_reason:
+            print(f"\n   🚨 [{now}] STOP TRIGGERED at ${price:,.2f}")
+            print(f"      Reason: {sell_reason}")
+
+            signal = {
+                'signal': 'SELL',
+                'reason': sell_reason,
+                'price': price,
+                'time': datetime.now().isoformat()
+            }
+            self.execute_trade(signal)
+
+            # Telegram alert
+            pnl = ((price - self.entry_price) / self.entry_price) * 100
+            pnl_sign = "+" if pnl >= 0 else ""
+            msg = (
+                f"🚨 <b>STOP LOSS (5-min Monitor)</b>\n"
+                f"━━━━━━━━━━━━━━━\n"
+                f"💰 Entry: ${self.entry_price:,.2f}\n"
+                f"💰 Exit: <b>${price:,.2f}</b>\n"
+                f"{'🟢' if pnl >= 0 else '🔴'} P&L: <b>{pnl_sign}{pnl:.2f}%</b>\n"
+                f"📊 Reason: {sell_reason}\n"
+                f"🏷 Mode: {'PAPER' if self.paper_trading else 'LIVE'}"
+            )
+            send_telegram(msg)
+        else:
+            stop_info = f" | Stop: ${self.stop_price:,.2f}" if self.stop_price else ""
+            print(f"   📡 [{now}] BTC: ${price:,.2f} | P&L: {current_pnl:+.2f}%{stop_info}")
 
     def run_once(self):
         """Single iteration"""
@@ -193,7 +272,22 @@ class IntegratedSwitcher:
         # 4. Execute
         self.execute_trade(signal)
 
-        # 5. Stats
+        # 5. Update stop tracking for 5-min monitoring
+        if self.position:
+            self.active_strategy_name = strategy['name']
+            atr = signal.get('atr')
+            if atr:
+                self.last_atr = atr
+            if strategy['name'] == 'ADX Momentum Thrust' and self.last_atr:
+                self.high_watermark = max(self.high_watermark or 0, signal['price'])
+                self.stop_price = self.high_watermark - (1.5 * self.last_atr)
+            elif strategy['name'] == 'Bollinger Band Mean Reversion' and self.last_atr:
+                self.stop_price = self.entry_price - (1.5 * self.last_atr)
+            # Williams %R: no price-based stop (emergency 5% stop still applies)
+            if self.stop_price:
+                print(f"   🛡️  Stop level: ${self.stop_price:,.2f}")
+
+        # 6. Stats
         if len(self.trades_log) > 0:
             print(f"\n📊 Session Stats:")
             print(f"   Total Trades: {len([t for t in self.trades_log if t['action'] == 'SELL'])}")
@@ -209,7 +303,8 @@ def main():
     switcher = IntegratedSwitcher(paper_trading=True)
     
     print("\n🚀 Starting trading loop...")
-    print("   Checking every 1 hour")
+    print("   Full signal check: every 1 hour")
+    print("   Stop loss monitor: every 5 min")
     print("   Press Ctrl+C to stop\n")
 
     send_startup_message()
@@ -217,8 +312,12 @@ def main():
     try:
         while True:
             switcher.run_once()
-            print(f"\n💤 Next check in 1 hour...")
-            time.sleep(3600)  # 1 hour
+            # 11 lightweight checks at 5-min intervals = 55 min, then next full run
+            for i in range(11):
+                mins_left = (11 - i) * 5
+                print(f"\n💤 Next full check in {mins_left} min...")
+                time.sleep(300)  # 5 minutes
+                switcher.check_between_signals()
     except KeyboardInterrupt:
         print("\n\n✅ System stopped")
         

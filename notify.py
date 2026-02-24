@@ -189,7 +189,7 @@ def send_startup_message():
         f"🚀 <b>TRADING BOT STARTED</b>\n"
         f"━━━━━━━━━━━━━━━\n"
         f"🏷 Mode: PAPER TRADING\n"
-        f"⏱ Interval: 1 hour\n"
+        f"⏱ Signals: 1 hour | Stops: 5 min\n"
         f"🕐 {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}"
     )
     send_telegram(msg)
