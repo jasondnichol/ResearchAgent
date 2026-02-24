@@ -4,13 +4,16 @@
 
 This is an **AI-powered crypto trading bot** that uses regime detection to automatically switch between trading strategies. Built by Jason Nichol. The system researches strategies via Claude API, backtests them on 4 years of BTC data, and deploys approved strategies for automated paper trading.
 
-## Current Status (Feb 23, 2026)
+## Current Status (Feb 24, 2026)
 
 - **Production:** Running 24/7 on AWS EC2 (184.72.84.30) in paper trading mode
-- **Strategy:** Williams %R Mean Reversion (54.9% win rate, 2.09 profit factor)
-- **Market Regime:** RANGING (Williams %R is active)
-- **First trade completed:** BUY $68,072 → SELL $68,091 (+0.03%)
-- **Telegram notifications:** Integrated and working (BUY/SELL alerts + daily summary)
+- **RANGING strategy:** Williams %R Mean Reversion (54.9% win rate, 2.09 PF) — Path A approved
+- **TRENDING strategy:** ADX Momentum Thrust (50% win rate, 1.92 PF) — Path B approved
+- **VOLATILE strategy:** None yet
+- **Market Regime:** TRENDING (ADX Momentum is active, holding — bearish DI)
+- **Regime classifier:** Unified `RegimeClassifier` in market_regime.py (Wilder's EWM ADX, 3 regimes)
+- **Force-sell:** Bot auto-exits positions after 3 hours if regime changes and no strategy matches
+- **Telegram notifications:** Integrated and working (BUY/SELL/force-sell alerts + daily summary)
 - **Logging:** File logging to logs/trading.log and logs/trades.log
 
 ## Architecture
@@ -19,25 +22,28 @@ This is an **AI-powered crypto trading bot** that uses regime detection to autom
 Claude API → Research Agent → Backtest → Strategy Library → Strategy Switcher → Coinbase Public API
 ```
 
-- **Market Regime Detector** classifies BTC as RANGING/TRENDING/VOLATILE
+- **RegimeClassifier** (market_regime.py) — single source of truth for regime labels using Wilder's EWM ADX
 - **Strategy Switcher** (integrated_switcher.py) runs every 1 hour, picks strategy for current regime
-- **Williams %R** is the only approved strategy (for RANGING markets)
-- **No approved TRENDING or VOLATILE strategies yet** (EMA Crossover and Breakout both failed backtesting)
+- **Williams %R** approved for RANGING markets (Path A: high win rate)
+- **ADX Momentum Thrust** approved for TRENDING markets (Path B: high profit factor, trailing stop)
+- **No approved VOLATILE strategy yet** — force-sell protects positions if regime shifts to VOLATILE
 
 ## Key Files
 
 | File | Purpose |
 |------|---------|
 | `integrated_switcher.py` | Main trading bot (runs 24/7 on EC2) ⭐ |
+| `market_regime.py` | `RegimeClassifier` (canonical) + `MarketRegimeDetector` |
+| `williams_r_strategy.py` | Williams %R signal generation (RANGING) |
+| `adx_momentum_strategy.py` | ADX Momentum signal generation (TRENDING) |
 | `notify.py` | Telegram notifications + file logging |
 | `daily_summary.py` | Sends daily trade summary via Telegram |
-| `williams_r_strategy.py` | Williams %R signal generation |
-| `market_regime.py` | Regime detection (RANGING/TRENDING/VOLATILE) |
-| `research_agent_v2.py` | Claude API strategy research |
 | `strategy_library.py` | Strategy library management |
 | `strategy_library.json` | Approved strategies database |
-| `regime_backtester.py` | Regime-specific backtesting |
-| `cycle_backtester_cached.py` | 4-year BTC data cache |
+| `regime_backtester.py` | Regime-specific backtesting (90-day hourly) |
+| `backtest_adx_trending.py` | ADX Momentum 4-year daily backtest |
+| `cycle_backtester_cached.py` | 4-year BTC data cache + regime classification |
+| `research_agent_v2.py` | Claude API strategy research |
 | `btc_4year_cache.json` | Cached 4-year historical data |
 | `.env` | API keys (CLAUDE_API_KEY, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID) |
 
@@ -52,7 +58,7 @@ Claude API → Research Agent → Backtest → Strategy Library → Strategy Swi
 ### Deploy workflow:
 1. Edit files locally
 2. SCP changed files to EC2
-3. SSH in, stop bot (Ctrl+C in screen), restart `python integrated_switcher.py`
+3. SSH in, kill old bot, restart: `screen -dmS tradingbot venv/bin/python3 integrated_switcher.py`
 
 ## Tech Stack
 
@@ -73,22 +79,29 @@ Claude API → Research Agent → Backtest → Strategy Library → Strategy Swi
 
 ## Trading Strategy Details
 
-### Williams %R Mean Reversion (APPROVED - RANGING markets)
+### Williams %R Mean Reversion (APPROVED - RANGING markets, Path A)
 - Williams %R(14) crosses above -80 + price below SMA(21) → BUY
 - Williams %R crosses below -20 OR price ≥ SMA + 1.5% → SELL
 - Timeframe: 1H candles
 - Backtested: 51 trades, 54.9% win rate, 2.09 profit factor, +7.15% total P&L
 
-### Market Regime Detection
-- Uses 30 days of price data
-- Calculates ADX, ATR, SMA 20/50/200
-- RANGING: ADX < 25, low volatility
-- TRENDING: ADX > 25, clear direction
-- VOLATILE: High ATR, rapid price swings
+### ADX Momentum Thrust (APPROVED - TRENDING markets, Path B)
+- Entry: ADX > 20 + ADX rising (5-bar) + +DI > -DI + DI crossover (15 bars) + RSI 35-78 + price > SMA(50)
+- Exit: ADX < 20 OR RSI > 75 OR trailing stop (1.5x ATR from high watermark) OR bearish DI reversal
+- Timeframe: 1H candles
+- Backtested: 10 trades, 50% win rate, 1.92 profit factor, +12.17% total P&L
+- Avg win: +5.07% | Avg loss: -2.64% | Trailing stop locks in gains
+
+### Market Regime Detection (Unified RegimeClassifier)
+- Uses Wilder's EWM (alpha=1/period) for ATR, DI, and ADX smoothing
+- Calculates ADX(14), ATR(14), SMA(20), SMA(50)
+- TRENDING: ADX > 25 AND clear direction (UPTREND or DOWNTREND)
+- VOLATILE: Volatility (ATR/close) > 3%
+- RANGING: Everything else
 
 ### 4-Year Historical Data
 - Period: 2022-02-23 to 2026-02-21 (1460 days)
-- TRENDING: 48.7% | VOLATILE: 31.5% | RANGING: 19.8%
+- TRENDING: 37.1% | VOLATILE: 44.6% | RANGING: 18.3%
 - Cached in btc_4year_cache.json
 
 ## Related Projects
@@ -99,11 +112,10 @@ Claude API → Research Agent → Backtest → Strategy Library → Strategy Swi
 ## Priorities / What's Next
 
 1. Monitor paper trading performance over 30 days
-2. Research and approve TRENDING market strategies
-3. Research VOLATILE market strategies
-4. Add more trading pairs (ETH, etc.)
-5. Consider live trading with small capital ($500-1000) after validation
-6. Integrate findings into TradeSavvy dashboard
+2. Research and approve VOLATILE market strategies
+3. Add more trading pairs (ETH, etc.)
+4. Consider live trading with small capital ($500-1000) after validation
+5. Integrate findings into TradeSavvy dashboard
 
 ## Important Rules
 
@@ -111,7 +123,9 @@ Claude API → Research Agent → Backtest → Strategy Library → Strategy Swi
 - **NEVER commit API keys** to git
 - **Always test locally** before deploying to EC2
 - **Paper trading only** until 30-day validation complete
-- Strategy must pass backtesting (55%+ win rate, 1.5+ PF) before deployment
+- Strategy must pass backtesting via two-path approval before deployment:
+  - Path A (mean-reversion): 55%+ win rate AND 1.5+ PF
+  - Path B (trend-following): 1.8+ PF AND avg_win/avg_loss >= 1.5 AND 10+ trades
 
 ## Owner
 
