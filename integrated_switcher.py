@@ -21,8 +21,9 @@ class IntegratedSwitcher:
         self.current_regime = None
         self.non_matching_regime_count = 0
 
-        # Stop monitoring between hourly signals
+        # Stop/take-profit monitoring between hourly signals
         self.stop_price = None
+        self.take_profit_price = None
         self.high_watermark = None
         self.last_atr = None
         self.active_strategy_name = None
@@ -100,6 +101,7 @@ class IntegratedSwitcher:
             self.position = None
             self.entry_price = 0
             self.stop_price = None
+            self.take_profit_price = None
             self.high_watermark = None
             self.last_atr = None
             self.active_strategy_name = None
@@ -150,6 +152,7 @@ class IntegratedSwitcher:
         self.position = None
         self.entry_price = 0
         self.stop_price = None
+        self.take_profit_price = None
         self.high_watermark = None
         self.last_atr = None
         self.active_strategy_name = None
@@ -181,9 +184,12 @@ class IntegratedSwitcher:
                 self.high_watermark = price
                 self.stop_price = self.high_watermark - (1.5 * self.last_atr)
 
-        # Check stop loss
+        # Check take-profit
         sell_reason = None
-        if self.stop_price and price <= self.stop_price:
+        if self.take_profit_price and price >= self.take_profit_price:
+            sell_reason = f'Take-profit hit (${self.take_profit_price:,.2f}) — 5-min monitor'
+        # Check stop loss
+        elif self.stop_price and price <= self.stop_price:
             sell_reason = f'Stop loss hit (${self.stop_price:,.2f}) — 5-min monitor'
         # Emergency stop: 5% below entry regardless of strategy
         elif price <= self.entry_price * 0.95:
@@ -204,8 +210,11 @@ class IntegratedSwitcher:
             # Telegram alert
             pnl = ((price - self.entry_price) / self.entry_price) * 100
             pnl_sign = "+" if pnl >= 0 else ""
+            is_profit = 'Take-profit' in sell_reason
+            header = "TARGET HIT (5-min Monitor)" if is_profit else "STOP LOSS (5-min Monitor)"
+            emoji = "🎯" if is_profit else "🚨"
             msg = (
-                f"🚨 <b>STOP LOSS (5-min Monitor)</b>\n"
+                f"{emoji} <b>{header}</b>\n"
                 f"━━━━━━━━━━━━━━━\n"
                 f"💰 Entry: ${self.entry_price:,.2f}\n"
                 f"💰 Exit: <b>${price:,.2f}</b>\n"
@@ -216,7 +225,8 @@ class IntegratedSwitcher:
             send_telegram(msg)
         else:
             stop_info = f" | Stop: ${self.stop_price:,.2f}" if self.stop_price else ""
-            print(f"   📡 [{now}] BTC: ${price:,.2f} | P&L: {current_pnl:+.2f}%{stop_info}")
+            tp_info = f" | TP: ${self.take_profit_price:,.2f}" if self.take_profit_price else ""
+            print(f"   📡 [{now}] BTC: ${price:,.2f} | P&L: {current_pnl:+.2f}%{stop_info}{tp_info}")
 
     def run_once(self):
         """Single iteration"""
@@ -272,20 +282,36 @@ class IntegratedSwitcher:
         # 4. Execute
         self.execute_trade(signal)
 
-        # 5. Update stop tracking for 5-min monitoring
+        # 5. Update stop/take-profit tracking for 5-min monitoring
         if self.position:
             self.active_strategy_name = strategy['name']
             atr = signal.get('atr')
             if atr:
                 self.last_atr = atr
+
+            # Stop levels
             if strategy['name'] == 'ADX Momentum Thrust' and self.last_atr:
                 self.high_watermark = max(self.high_watermark or 0, signal['price'])
                 self.stop_price = self.high_watermark - (1.5 * self.last_atr)
             elif strategy['name'] == 'Bollinger Band Mean Reversion' and self.last_atr:
                 self.stop_price = self.entry_price - (1.5 * self.last_atr)
             # Williams %R: no price-based stop (emergency 5% stop still applies)
+
+            # Take-profit levels
+            if strategy['name'] == 'Bollinger Band Mean Reversion':
+                sma_20 = signal.get('sma_20')
+                if sma_20:
+                    self.take_profit_price = sma_20
+            elif strategy['name'] == 'Williams %R Mean Reversion':
+                sma_21 = signal.get('sma_21')
+                if sma_21:
+                    self.take_profit_price = sma_21 * 1.015
+            # ADX Momentum: no fixed target (trailing stop locks in gains)
+
             if self.stop_price:
-                print(f"   🛡️  Stop level: ${self.stop_price:,.2f}")
+                print(f"   🛡️  Stop: ${self.stop_price:,.2f}")
+            if self.take_profit_price:
+                print(f"   🎯  Take-profit: ${self.take_profit_price:,.2f}")
 
         # 6. Stats
         if len(self.trades_log) > 0:
