@@ -47,7 +47,30 @@
       "timeframe": "1H",
       "candle_lookback": 100,
       "check_interval": "5m"
+    },
+    {
+      "name": "Bollinger Band Mean Reversion",
+      "regime": "VOLATILE",
+      "indicators": [
+        "Bollinger Bands (20, 2σ)",
+        "RSI (14)",
+        "ATR (14)"
+      ],
+      "win_rate": 0.727,
+      "profit_factor": 1.65,
+      "total_pnl": 21.10,
+      "avg_win": 6.69,
+      "avg_loss": -10.80,
+      "risk_level": "Medium",
+      "date_added": "2026-02-23T17:13:00.000000",
+      "status": "APPROVED",
+      "code_file": "bb_reversion_strategy.py",
+      "backtest_file": "backtest_bb_volatile_20260223_171407.json",
+      "notes": "4-year daily backtest, 11 trades, approved via Path A (win-rate). Enters below lower BB with RSI oversold, exits at middle BB.",
+      "timeframe": "1H",
+      "candle_lookback": 100,
+      "check_interval": "5m"
     }
   ],
-  "last_updated": "2026-02-23T16:40:00.000000"
+  "last_updated": "2026-02-23T17:15:00.000000"
 }

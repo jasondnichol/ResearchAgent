@@ -1,10 +1,11 @@
-"""Integrated Strategy Switcher with Williams %R and ADX Momentum"""
+"""Integrated Strategy Switcher with Williams %R, ADX Momentum, and BB Reversion"""
 import json
 import time
 from datetime import datetime
 from market_regime import MarketRegimeDetector
 from williams_r_strategy import WilliamsRStrategy
 from adx_momentum_strategy import ADXMomentumStrategy
+from bb_reversion_strategy import BBReversionStrategy
 from notify import send_telegram, send_startup_message
 
 class IntegratedSwitcher:
@@ -22,6 +23,7 @@ class IntegratedSwitcher:
         # Initialize strategies
         self.williams_r = WilliamsRStrategy()
         self.adx_momentum = ADXMomentumStrategy()
+        self.bb_reversion = BBReversionStrategy()
     
     def load_library(self):
         """Load strategy library"""
@@ -183,6 +185,8 @@ class IntegratedSwitcher:
             signal = self.williams_r.generate_signal('BTC-USD')
         elif strategy['name'] == 'ADX Momentum Thrust':
             signal = self.adx_momentum.generate_signal('BTC-USD')
+        elif strategy['name'] == 'Bollinger Band Mean Reversion':
+            signal = self.bb_reversion.generate_signal('BTC-USD')
         else:
             signal = {'signal': 'HOLD', 'reason': 'Strategy not implemented'}
 
