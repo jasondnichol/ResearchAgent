@@ -5,7 +5,7 @@ from datetime import datetime
 from market_regime import MarketRegimeDetector
 from williams_r_strategy import WilliamsRStrategy
 from adx_momentum_strategy import ADXMomentumStrategy
-from notify import send_telegram
+from notify import send_telegram, send_startup_message
 
 class IntegratedSwitcher:
     def __init__(self, paper_trading=True):
@@ -207,6 +207,8 @@ def main():
     print("\n🚀 Starting trading loop...")
     print("   Checking every 1 hour")
     print("   Press Ctrl+C to stop\n")
+
+    send_startup_message()
     
     try:
         while True:
