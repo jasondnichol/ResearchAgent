@@ -24,7 +24,9 @@ Claude API → Research Agent → Backtest → Strategy Library → Strategy Swi
 ```
 
 - **RegimeClassifier** (market_regime.py) — single source of truth for regime labels using Wilder's EWM ADX
-- **Strategy Switcher** (integrated_switcher.py) runs every 1 hour, picks strategy for current regime
+- **Strategy Switcher** (integrated_switcher.py) — dual-loop architecture:
+  - **Hourly full check:** Fetches 100 candles, detects regime, computes indicators, generates signals
+  - **5-min lightweight check:** Fetches current price from Coinbase ticker, monitors stop loss & take-profit
 - **Williams %R** approved for RANGING markets (Path A: high win rate)
 - **ADX Momentum Thrust** approved for TRENDING markets (Path B: high profit factor, trailing stop)
 - **BB Mean Reversion** approved for VOLATILE markets (Path A: high win rate, enters at lower BB)
@@ -78,19 +80,23 @@ Claude API → Research Agent → Backtest → Strategy Library → Strategy Swi
   - Path A (mean-reversion): 55%+ win rate AND 1.5+ profit factor
   - Path B (trend-following): 1.8+ profit factor AND avg_win/avg_loss >= 1.5 AND 10+ trades
 - Paper trading mode ON (no real money)
-- Bot checks regime every 1 hour
+- Bot checks regime every 1 hour (full signal generation)
+- Price monitoring every 5 minutes (stop loss + take-profit)
+- Emergency stop: 5% below entry price (all strategies)
 
 ## Trading Strategy Details
 
 ### Williams %R Mean Reversion (APPROVED - RANGING markets, Path A)
 - Williams %R(14) crosses above -80 + price below SMA(21) → BUY
 - Williams %R crosses below -20 OR price ≥ SMA + 1.5% → SELL
+- **5-min monitoring:** Stop = emergency 5% only | Take-profit = SMA(21) * 1.015
 - Timeframe: 1H candles
 - Backtested: 51 trades, 54.9% win rate, 2.09 profit factor, +7.15% total P&L
 
 ### ADX Momentum Thrust (APPROVED - TRENDING markets, Path B)
 - Entry: ADX > 20 + ADX rising (5-bar) + +DI > -DI + DI crossover (15 bars) + RSI 35-78 + price > SMA(50)
 - Exit: ADX < 20 OR RSI > 75 OR trailing stop (1.5x ATR from high watermark) OR bearish DI reversal
+- **5-min monitoring:** Stop = trailing (high_watermark - 1.5x ATR, updated every 5 min) | No fixed take-profit
 - Timeframe: 1H candles
 - Backtested: 10 trades, 50% win rate, 1.92 profit factor, +12.17% total P&L
 - Avg win: +5.07% | Avg loss: -2.64% | Trailing stop locks in gains
@@ -98,10 +104,30 @@ Claude API → Research Agent → Backtest → Strategy Library → Strategy Swi
 ### Bollinger Band Mean Reversion (APPROVED - VOLATILE markets, Path A)
 - Entry: Close below lower BB (SMA(20) - 2σ) + RSI(14) < 35 (oversold)
 - Exit: Price reaches SMA(20) middle band OR RSI > 70 OR 1.5x ATR stop loss
+- **5-min monitoring:** Stop = entry - 1.5x ATR | Take-profit = SMA(20) middle band
 - Regime exit: Force-close after 3 consecutive non-VOLATILE bars
 - Timeframe: 1H candles
 - Backtested: 11 trades, 72.7% win rate, 1.65 profit factor, +21.10% total P&L
 - Avg win: +6.69% | Avg loss: -10.80%
+
+### 5-Minute Price Monitoring (Between Hourly Signals)
+
+The bot uses a dual-loop architecture to avoid being blind between hourly checks:
+
+```
+:00  Full signal check (100 candles, all indicators, regime detection)
+:05  Lightweight price check (Coinbase ticker → stop/TP check)
+:10  Lightweight price check
+...
+:55  Lightweight price check
+:00  Full signal check (next hour)
+```
+
+- **Lightweight check** uses `Coinbase /products/BTC-USD/ticker` — just current price, no candle history
+- Stop and take-profit levels are computed during the hourly full check, then stored on the switcher
+- Every 5 min: check price against stored levels, trigger SELL if hit
+- **Emergency stop** (all strategies): auto-sell if price drops > 5% below entry
+- ADX trailing stop updates high watermark every 5 min (stop ratchets up as price rises)
 
 ### Market Regime Detection (Unified RegimeClassifier)
 - Uses Wilder's EWM (alpha=1/period) for ATR, DI, and ADX smoothing
