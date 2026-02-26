@@ -7,6 +7,8 @@ Architecture:
   - Daily signal check at 00:15 UTC (after daily candle close)
   - Trailing stop monitoring every 30 minutes
   - Max 4 concurrent positions, 2% risk per trade
+  - 4x ATR trailing stop (wider to let winners run)
+  - Pyramiding: add 1% risk tranche to winners at +15% on new 20-day high
   - Partial profit taking at +10% and +20%
   - BTC bull filter: only enter when BTC > SMA(200) AND SMA(50) > SMA(200)
   - Telegram notifications for all trades
@@ -38,7 +40,7 @@ STRATEGY_PARAMS = {
     'donchian_period': 20,
     'exit_period': 10,
     'atr_period': 14,
-    'atr_mult': 3.0,
+    'atr_mult': 4.0,
     'volume_mult': 1.5,
     'ema_period': 21,
     'rsi_blowoff': 80,
@@ -56,6 +58,11 @@ MAX_POSITIONS = 4
 RISK_PER_TRADE_PCT = 2.0  # risk 2% of equity per trade
 STARTING_CAPITAL = 10000.0  # paper trading starting balance
 EMERGENCY_STOP_PCT = 15.0  # emergency stop 15% below entry
+
+# Pyramiding (add to winners)
+PYRAMID_ENABLED = True
+PYRAMID_GAIN_PCT = 15.0    # add to winner when position is up +15%
+PYRAMID_RISK_PCT = 1.0     # 1% equity risk on the add-on tranche
 
 # Bull market filter (BTC macro gate)
 BULL_FILTER_ENABLED = True
@@ -119,6 +126,7 @@ class DonchianMultiCoinBot:
                 'size_usd': pos['size_usd'],
                 'last_atr': pos.get('last_atr', 0),
                 'stop_price': pos.get('stop_price', 0),
+                'pyramided': pos.get('pyramided', False),
             }
         with open(STATE_FILE, 'w') as f:
             json.dump(state, f, indent=2)
@@ -143,6 +151,7 @@ class DonchianMultiCoinBot:
                     'size_usd': pos_data['size_usd'],
                     'last_atr': pos_data.get('last_atr', 0),
                     'stop_price': pos_data.get('stop_price', 0),
+                    'pyramided': pos_data.get('pyramided', False),
                 }
             if self.positions:
                 print(f"Restored {len(self.positions)} open positions from state file")
@@ -281,6 +290,7 @@ class DonchianMultiCoinBot:
             'size_usd': size,
             'last_atr': atr,
             'stop_price': stop_price,
+            'pyramided': False,
         }
 
         self.save_state()
@@ -351,6 +361,63 @@ class DonchianMultiCoinBot:
             f"{'🟢' if pnl_pct >= 0 else '🔴'} P&L: <b>{pnl_sign}{pnl_pct:.2f}%</b> (${pnl_usd:+,.0f})\n"
             f"📊 {reason}\n"
             f"⏱ Held: {hold_days:.1f} days\n"
+            f"💼 Equity: ${equity:,.0f}\n"
+            f"🏷 Mode: {mode}"
+        )
+        send_telegram(msg)
+
+    # ------------------------------------------------------------------
+    # PYRAMIDING (add to winners)
+    # ------------------------------------------------------------------
+
+    def execute_pyramid(self, symbol, price, atr, gain_pct, prices=None):
+        """Add a tranche to an existing winning position"""
+        if symbol not in self.positions:
+            return
+        pos = self.positions[symbol]
+        if pos.get('pyramided'):
+            return  # only one add per position
+
+        equity = self.total_equity(prices)
+        add_risk = equity * (PYRAMID_RISK_PCT / 100)
+        stop_distance = STRATEGY_PARAMS['atr_mult'] * atr
+        stop_pct = stop_distance / price
+
+        if stop_pct > 0:
+            add_size = add_risk / stop_pct
+        else:
+            add_size = equity * 0.05
+
+        # Don't use more than half remaining cash
+        add_size = min(add_size, self.cash * 0.50)
+        if add_size < 50:
+            self.logger.info(f"SKIP PYRAMID {symbol}: add too small (${add_size:.0f})")
+            return
+
+        self.cash -= add_size
+        pos['size_usd'] += add_size
+        pos['pyramided'] = True
+
+        # Update stop for new combined position
+        pos['stop_price'] = pos['high_watermark'] - (STRATEGY_PARAMS['atr_mult'] * atr)
+
+        self.save_state()
+
+        mode = 'PAPER' if self.paper_trading else 'LIVE'
+        equity = self.total_equity(prices)
+
+        print(f"\n  PYRAMID {symbol} @ ${price:,.2f} | Add: ${add_size:,.0f} | Total: ${pos['size_usd']:,.0f}")
+        self.logger.info(f"PYRAMID | {symbol} | ${price:,.2f} | Add: ${add_size:,.0f} | +{gain_pct:.1f}% gain")
+        self.trade_logger.info(f"PYRAMID | {symbol} | ${price:,.2f} | Add: ${add_size:,.0f} | +{gain_pct:.1f}% gain | {mode}")
+
+        msg = (
+            f"📈 <b>PYRAMID ADD {symbol}</b>\n"
+            f"━━━━━━━━━━━━━━━\n"
+            f"💰 Price: <b>${price:,.2f}</b>\n"
+            f"📦 Add size: ${add_size:,.0f}\n"
+            f"📦 Total position: ${pos['size_usd']:,.0f}\n"
+            f"🎯 Gain at add: +{gain_pct:.1f}%\n"
+            f"🛡 Stop: ${pos['stop_price']:,.2f}\n"
             f"💼 Equity: ${equity:,.0f}\n"
             f"🏷 Mode: {mode}"
         )
@@ -448,7 +515,7 @@ class DonchianMultiCoinBot:
             except Exception as e:
                 self.logger.error(f"Exit check failed for {symbol}: {e}")
 
-        # Check bull filter before scanning for entries
+        # Check bull filter before scanning for entries / pyramiding
         is_bull, bull_details = self.check_bull_filter()
         bull_status = bull_details.get('status', 'UNKNOWN')
         if bull_details.get('btc_close'):
@@ -457,6 +524,44 @@ class DonchianMultiCoinBot:
         else:
             print(f"\nBull filter: {bull_status}")
         self.logger.info(f"Bull filter: {bull_status} | {bull_details}")
+
+        # Check pyramiding on existing positions (gated by bull filter)
+        if PYRAMID_ENABLED and is_bull and self.positions:
+            print(f"\nChecking pyramid opportunities...")
+            for symbol in list(self.positions.keys()):
+                pos = self.positions[symbol]
+                if pos.get('pyramided'):
+                    continue
+
+                try:
+                    strategy = self.strategies[symbol]
+                    df = strategy.fetch_daily_candles(symbol, limit=STRATEGY_PARAMS['lookback'])
+                    df = strategy.calculate_indicators(df)
+                    if len(df) < 25:
+                        continue
+
+                    current = df.iloc[-1]
+                    prev = df.iloc[-2]
+                    current_close = float(current['close'])
+                    gain_pct = ((current_close - pos['entry_price']) / pos['entry_price']) * 100
+
+                    # Pyramid: up +15% AND making new 20-day high
+                    new_high = (pd.notna(prev['donchian_high'])
+                                and current_close > float(prev['donchian_high']))
+
+                    if gain_pct >= PYRAMID_GAIN_PCT and new_high:
+                        atr = float(current['atr'])
+                        self.execute_pyramid(symbol, current_close, atr, gain_pct, prices)
+                    else:
+                        if gain_pct >= PYRAMID_GAIN_PCT:
+                            print(f"  {symbol}: +{gain_pct:.1f}% but no new 20d high")
+                        else:
+                            print(f"  {symbol}: +{gain_pct:.1f}% (need +{PYRAMID_GAIN_PCT}%)")
+
+                    time.sleep(0.3)
+
+                except Exception as e:
+                    self.logger.error(f"Pyramid check failed for {symbol}: {e}")
 
         # Check entries for coins we're not in (gated by bull filter)
         print(f"\nChecking entries...")
@@ -611,6 +716,8 @@ class DonchianMultiCoinBot:
         print(f"Coins: {', '.join(COIN_UNIVERSE)}")
         print(f"Max positions: {MAX_POSITIONS}")
         print(f"Risk per trade: {RISK_PER_TRADE_PCT}%")
+        print(f"Trailing stop: {STRATEGY_PARAMS['atr_mult']}x ATR")
+        print(f"Pyramiding: {'ON (+' + str(PYRAMID_GAIN_PCT) + '% / ' + str(PYRAMID_RISK_PCT) + '% risk)' if PYRAMID_ENABLED else 'OFF'}")
         print(f"Bull filter: {'ON' if BULL_FILTER_ENABLED else 'OFF'}")
         print(f"Daily check: {DAILY_CHECK_HOUR:02d}:{DAILY_CHECK_MINUTE:02d} UTC")
         print(f"Stop check: every {STOP_CHECK_INTERVAL // 60} min")
@@ -628,13 +735,16 @@ class DonchianMultiCoinBot:
         if BULL_FILTER_ENABLED and bull_details.get('btc_close'):
             bull_line = (f"{bull_emoji} Bull filter: <b>{bull_status}</b> "
                          f"(BTC ${bull_details['btc_close']:,.0f} vs SMA200 ${bull_details['sma_200']:,.0f})\n")
+        pyramid_line = f"📈 Pyramiding: +{PYRAMID_GAIN_PCT}% / {PYRAMID_RISK_PCT}% risk\n" if PYRAMID_ENABLED else ""
         msg = (
             f"🚀 <b>DONCHIAN BOT STARTED</b>\n"
             f"━━━━━━━━━━━━━━━\n"
             f"📊 Strategy: Donchian Breakout (Daily)\n"
+            f"🛡 Trailing: {STRATEGY_PARAMS['atr_mult']}x ATR\n"
             f"🪙 Coins: {len(COIN_UNIVERSE)}\n"
             f"💼 Equity: ${equity:,.0f}\n"
             f"📈 Positions: {len(self.positions)}/{MAX_POSITIONS}\n"
+            f"{pyramid_line}"
             f"{bull_line}"
             f"🏷 Mode: {'PAPER' if self.paper_trading else 'LIVE'}\n"
             f"🕐 {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}"

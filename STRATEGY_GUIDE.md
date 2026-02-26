@@ -49,7 +49,7 @@ The volume filter is also critical. Without it, returns drop from +46.4% to +18.
 
 ### Exit Conditions (any one triggers a sell)
 
-1. **Trailing stop (primary exit)**: Price drops below the high watermark minus 3x ATR(14). As price rises, the stop ratchets up but never moves down. This lets winners run while protecting gains.
+1. **Trailing stop (primary exit)**: Price drops below the high watermark minus 4x ATR(14). As price rises, the stop ratchets up but never moves down. The wider 4x multiplier (upgraded from 3x in Phase 3) lets winners run longer while still protecting gains.
 
 2. **Donchian exit channel**: Price closes below the 10-day low. This catches trend reversals that the trailing stop might miss.
 
@@ -57,7 +57,7 @@ The volume filter is also critical. Without it, returns drop from +46.4% to +18.
 
 ### Blow-Off Top Detection
 
-If volume spikes above 3x average AND RSI exceeds 80, the stop tightens from 3x ATR to 1.5x ATR. This captures the bulk of a parabolic move while exiting before the inevitable crash. Blow-off tops in crypto are common and can give back 50%+ of gains in days.
+If volume spikes above 3x average AND RSI exceeds 80, the stop tightens from 4x ATR to 1.5x ATR. This captures the bulk of a parabolic move while exiting before the inevitable crash. Blow-off tops in crypto are common and can give back 50%+ of gains in days.
 
 ### Partial Profit Taking
 
@@ -71,10 +71,23 @@ Instead of all-or-nothing exits, we scale out in three stages:
 
 This locks in some profit early while keeping exposure to larger moves.
 
+### Pyramiding (Adding to Winners)
+
+When an existing position is up +15% AND making a new 20-day Donchian high, the bot adds a second tranche. This only happens once per position, and only when the bull filter is active.
+
+| Parameter | Value |
+|-----------|-------|
+| Trigger | Position up +15% AND new 20-day high |
+| Add-on risk | 1% of equity |
+| Size | Calculated from 4x ATR stop distance, capped at 50% of remaining cash |
+| Max adds | 1 per position |
+
+Pyramiding was the single biggest improvement in Phase 3 backtesting. Over the full 4-year period, it boosted returns from +47.9% to +80.9% (with 4x ATR) and improved PF from 1.72 to 2.73. In out-of-sample testing, it turned a -3.2% loss into a +4.9% gain.
+
 ### Position Sizing and Risk Management
 
 - **Risk per trade**: 2% of portfolio equity
-- **Position size**: Calculated from stop distance. If the stop is 3x ATR below entry, the position is sized so that getting stopped out loses exactly 2% of equity.
+- **Position size**: Calculated from stop distance. If the stop is 4x ATR below entry, the position is sized so that getting stopped out loses exactly 2% of equity.
 - **Max concurrent positions**: 4 out of 8 coins
 - **Cash reserve**: Always keeps 5% cash available
 
@@ -218,6 +231,28 @@ We tested the strategy with increasing slippage to find the breaking point:
 
 The strategy remains profitable at all tested slippage levels, even at 0.90% total cost per side. With realistic 0.20% slippage, returns are +40.4%. Transaction costs are not a risk for this strategy.
 
+### Phase 3: Pyramiding & Exit Tuning
+
+Tested 7 variants combining pyramiding (add to winners at +15%) and exit tuning (4x ATR trailing stop) on top of the bull filter baseline.
+
+**Full Period (2022-2026):**
+
+| Variant | Trades | WR | PF | Return | MaxDD |
+|---------|--------|-----|------|--------|-------|
+| Baseline (bull filter) | 66 | 43.9% | 1.72 | +47.9% | 14.9% |
+| 4x ATR trailing | 60 | 46.7% | 1.95 | +36.4% | 11.8% |
+| 4x ATR + pyramid | 90 | 64.4% | 2.73 | +80.9% | 13.8% |
+
+**Out-of-Sample (2025-2026):**
+
+| Variant | Trades | WR | PF | Return | MaxDD |
+|---------|--------|-----|------|--------|-------|
+| Baseline (bull filter) | 16 | 43.8% | 0.78 | -3.2% | 12.5% |
+| 4x ATR trailing | 13 | 53.8% | 1.15 | +1.2% | 6.4% |
+| **4x ATR + pyramid** | **20** | **70.0%** | **1.60** | **+4.9%** | **8.2%** |
+
+The 4x ATR + pyramid variant was selected for production. It flipped the OOS from -3.2% loss to +4.9% gain while cutting drawdown from 12.5% to 8.2%.
+
 ### Key Backtest Files
 
 | File | Purpose |
@@ -225,6 +260,7 @@ The strategy remains profitable at all tested slippage levels, even at 0.90% tot
 | `backtest_donchian_daily.py` | 4-year multi-coin Donchian backtest |
 | `backtest_walkforward.py` | Walk-forward validation + slippage stress test |
 | `backtest_bull_filter.py` | Bull filter backtest + walk-forward revalidation |
+| `backtest_phase3.py` | Phase 3 pyramiding + exit tuning variants |
 | `regime_backtester.py` | Regime-specific backtesting (hourly, legacy) |
 | `cache_daily/` | Cached daily candles per coin |
 
@@ -277,7 +313,7 @@ We use 0.45% per side in backtests (conservative estimate for $1K-$10K tier). A 
 ## What's Next
 
 1. Monitor Donchian paper trading over 60-90 days (through current correction and any rebound)
-2. Phase 3: Test pyramiding (add to winners at +15-20%) and exit tuning (4x ATR trailing)
+2. ~~Phase 3: Test pyramiding and exit tuning~~ **DONE** — 4x ATR + pyramid deployed (Feb 26, 2026)
 3. Phase 4: Expand coin universe (add 4-6 more coins, re-backtest)
 4. Evaluate dropping NEAR and XRP if performance stays negative after next bull leg
 5. Consider live trading with $1,000-$2,000 after validation
