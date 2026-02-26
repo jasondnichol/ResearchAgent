@@ -7,9 +7,10 @@ This is an **automated crypto trading bot** that paper-trades 8 coins on daily c
 ## Current Status (Feb 26, 2026)
 
 - **Production:** Donchian bot running on EC2 (184.72.84.30) in `screen -S donchian`
-- **Strategy:** Donchian Channel Breakout (daily candles, regime-agnostic)
+- **Strategy:** Donchian Channel Breakout (daily candles) + BTC bull market filter
+- **Bull filter:** Entries only when BTC > SMA(200) AND SMA(50) > SMA(200). Currently BEAR.
 - **Coins:** BTC, ETH, SOL, XRP, SUI, LINK, ADA, NEAR (8 coins, dropped HBAR/AVAX)
-- **Backtest:** 103 trades, 38.8% WR, 1.45 PF, +46.4% return (with 0.45% fees/side)
+- **Backtest (with bull filter):** 66 trades, 43.9% WR, 1.72 PF, +47.9% return, 14.9% max DD
 - **Portfolio:** $10K paper, max 4 concurrent positions, 2% risk per trade
 - **Monitoring:** Daily signal check at 00:15 UTC, trailing stops every 30 min
 - **Telegram:** All trades + daily summary at 20:00 UTC
@@ -30,12 +31,18 @@ Coinbase Public API → Daily Candles → Donchian Strategy → Signal → Trade
 
 ## Donchian Strategy
 
+- **Bull filter:** BTC close > SMA(200) AND SMA(50) > SMA(200) — gates all entries
 - **Entry:** Close > 20-day Donchian high + volume > 1.5x avg + price > EMA(21)
 - **Exit:** 3x ATR(14) trailing stop OR close < 10-day low OR 15% emergency stop
 - **Blow-off:** Tighten stop to 1.5x ATR if volume > 3x avg AND RSI > 80
 - **Partial TP:** 25% at +10%, 25% at +20%, 50% runner on trailing stop
 - **Position sizing:** 2% risk per trade, sized by stop distance
 - **Avg win:** +25.8% | **Avg loss:** -10.8% | **Avg hold:** 21 days
+
+### Bull Filter Impact (4-year backtest)
+- Without filter: 103 trades, 38.8% WR, 1.45 PF, +46.4%, 20.1% DD
+- **With filter: 66 trades, 43.9% WR, 1.72 PF, +47.9%, 14.9% DD**
+- Walk-forward OOS (2025-2026): -3.2% with filter vs -9.4% without (bear market)
 
 ## Key Files
 
@@ -44,6 +51,8 @@ Coinbase Public API → Daily Candles → Donchian Strategy → Signal → Trade
 | `donchian_multicoin_bot.py` | Production bot (runs 24/7 on EC2) |
 | `donchian_breakout_strategy.py` | Donchian signal generation |
 | `backtest_donchian_daily.py` | 4-year multi-coin backtest |
+| `backtest_walkforward.py` | Walk-forward validation + slippage stress test |
+| `backtest_bull_filter.py` | Bull filter backtest + walk-forward revalidation |
 | `market_regime.py` | `RegimeClassifier` (legacy, kept for reference) |
 | `integrated_switcher.py` | Old hourly regime-switching bot (deprecated) |
 | `williams_r_strategy.py` | Williams %R signal generation (legacy) |
@@ -112,10 +121,12 @@ Backtests use 0.45% per side (conservative for $1K-$10K tier).
 
 ## Priorities / What's Next
 
-1. Monitor Donchian paper trading over 30 days
-2. Evaluate dropping NEAR/XRP if performance stays negative
-3. Consider live trading with $500-$1,000 after validation
-4. Integrate into TradeSavvy dashboard
+1. Monitor Donchian paper trading over 60-90 days (through correction and any rebound)
+2. Phase 3: Test pyramiding (add to winners) and exit tuning (4x ATR trailing)
+3. Phase 4: Expand coin universe (add 4-6 more coins, re-backtest)
+4. Evaluate dropping NEAR/XRP after next bull leg
+5. Consider live trading with $1,000-$2,000 after validation
+6. Integrate into TradeSavvy dashboard
 
 ## Important Rules
 
