@@ -43,7 +43,7 @@
       "status": "APPROVED",
       "code_file": "adx_momentum_strategy.py",
       "backtest_file": "backtest_adx_trending_20260223_163836.json",
-      "notes": "4-year daily backtest, 10 trades, approved via Path B (trend-following). Trailing stop at 1.5x ATR from high watermark.",
+      "notes": "4-year hourly backtest, 682 trades (loosened), PF 1.12, +40.37%. Removed DI crossover req, RSI 30-80. Trailing stop at 1.5x ATR from high watermark.",
       "timeframe": "1H",
       "candle_lookback": 100,
       "check_interval": "5m"
@@ -71,6 +71,44 @@
       "candle_lookback": 100,
       "check_interval": "5m"
     }
+    ,
+    {
+      "name": "Donchian Channel Breakout",
+      "regime": "ALL",
+      "indicators": [
+        "Donchian Channel (20)",
+        "Donchian Exit (10)",
+        "ATR (14)",
+        "EMA (21)",
+        "RSI (14)",
+        "Volume SMA (20)"
+      ],
+      "win_rate": 0.388,
+      "profit_factor": 1.45,
+      "total_pnl": 46.41,
+      "avg_win": 25.77,
+      "avg_loss": -10.82,
+      "risk_level": "Medium",
+      "date_added": "2026-02-25T18:33:00.000000",
+      "status": "APPROVED",
+      "code_file": "donchian_breakout_strategy.py",
+      "bot_file": "donchian_multicoin_bot.py",
+      "backtest_file": "backtest_donchian_20260225_183323.json",
+      "notes": "4-year daily backtest on 10 coins, 103 trades, +46.4% with 0.45% fees/side. Regime-agnostic. Avg hold 21 days. Max drawdown 20%. Volume filter critical. Dropped HBAR (0 wins) and AVAX (1/9 wins).",
+      "timeframe": "1D",
+      "candle_lookback": 60,
+      "check_interval": "30m",
+      "coins": ["BTC-USD", "ETH-USD", "SOL-USD", "XRP-USD", "SUI-USD", "LINK-USD", "ADA-USD", "NEAR-USD"],
+      "portfolio": {
+        "max_positions": 4,
+        "risk_per_trade_pct": 2.0,
+        "starting_capital": 10000,
+        "partial_tp1": "+10% (25%)",
+        "partial_tp2": "+20% (25%)",
+        "trailing_stop": "3x ATR from high watermark",
+        "emergency_stop": "15%"
+      }
+    }
   ],
-  "last_updated": "2026-02-23T17:15:00.000000"
+  "last_updated": "2026-02-25T18:33:00.000000"
 }

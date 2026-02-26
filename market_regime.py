@@ -10,7 +10,38 @@ class RegimeClassifier:
 
     Every backtester and the production bot use this class so that
     regime labels are always consistent.
+
+    Timeframe-aware: ATR/close volatility scales with candle size, so the
+    VOLATILE threshold differs between daily (3.0%) and hourly (0.5%) data.
+    ADX > 25 works the same on both timeframes.
     """
+
+    # Volatility thresholds by timeframe (ATR/close %)
+    # Calibrated so that each timeframe produces ~45% VOLATILE bars on 4yr BTC data
+    VOLATILITY_THRESHOLDS = {
+        'daily': 3.0,
+        'hourly': 0.5,
+    }
+    ADX_THRESHOLD = 25  # Same for all timeframes
+
+    @staticmethod
+    def detect_timeframe(df):
+        """Auto-detect whether a DataFrame contains daily or hourly candles.
+
+        Uses the median time delta between consecutive bars.
+        Returns 'hourly' or 'daily'.
+        """
+        if 'time' not in df.columns or len(df) < 3:
+            return 'daily'  # safe default
+
+        times = pd.to_datetime(df['time'])
+        deltas = times.diff().dropna()
+        median_delta = deltas.median()
+
+        # Hourly: median delta ~1 hour (allow some slack for gaps)
+        if median_delta <= pd.Timedelta(hours=2):
+            return 'hourly'
+        return 'daily'
 
     @staticmethod
     def compute_indicators(df):
@@ -72,25 +103,40 @@ class RegimeClassifier:
 
         return df
 
-    @staticmethod
-    def classify_bar(adx, volatility_pct, trend_direction):
+    @classmethod
+    def classify_bar(cls, adx, volatility_pct, trend_direction, timeframe='daily'):
         """The ONE canonical decision function.
+
+        Args:
+            adx: ADX value
+            volatility_pct: ATR/close as percentage
+            trend_direction: 'UPTREND', 'DOWNTREND', or 'SIDEWAYS'
+            timeframe: 'daily' or 'hourly' — determines volatility threshold
 
         Returns: 'TRENDING', 'VOLATILE', or 'RANGING'
         """
-        if adx > 25 and trend_direction in ('UPTREND', 'DOWNTREND'):
+        vol_threshold = cls.VOLATILITY_THRESHOLDS.get(timeframe, 3.0)
+
+        if adx > cls.ADX_THRESHOLD and trend_direction in ('UPTREND', 'DOWNTREND'):
             return 'TRENDING'
-        if volatility_pct > 3.0:
+        if volatility_pct > vol_threshold:
             return 'VOLATILE'
         return 'RANGING'
 
     @classmethod
-    def classify_dataframe(cls, df, min_warmup=50):
+    def classify_dataframe(cls, df, min_warmup=50, timeframe=None):
         """Convenience: compute indicators + classify every bar.
 
-        Bars before min_warmup are labelled 'UNKNOWN'.
+        Args:
+            df: DataFrame with OHLCV + time columns
+            min_warmup: bars before this index are labelled 'UNKNOWN'
+            timeframe: 'daily', 'hourly', or None (auto-detect)
+
         Returns a copy of df with 'regime' column added.
         """
+        if timeframe is None:
+            timeframe = cls.detect_timeframe(df)
+
         df = cls.compute_indicators(df)
         df['regime'] = 'UNKNOWN'
 
@@ -99,7 +145,8 @@ class RegimeClassifier:
             if pd.isna(row['adx']) or pd.isna(row['sma_20']):
                 continue
             df.iloc[i, df.columns.get_loc('regime')] = cls.classify_bar(
-                row['adx'], row['volatility_pct'], row['trend_direction']
+                row['adx'], row['volatility_pct'], row['trend_direction'],
+                timeframe=timeframe
             )
 
         return df
@@ -187,11 +234,12 @@ class MarketRegimeDetector:
         # Price change over 30 days
         price_change_30d = ((current_price - df.iloc[0]['close']) / df.iloc[0]['close']) * 100
 
-        # Classify using the canonical function
+        # Classify using the canonical function (hourly candles)
         regime_type = RegimeClassifier.classify_bar(
             float(adx) if pd.notna(adx) else 0,
             float(volatility_pct),
-            trend_direction
+            trend_direction,
+            timeframe='hourly'
         )
 
         # Build regime dict

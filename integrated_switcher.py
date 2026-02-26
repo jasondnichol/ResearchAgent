@@ -10,11 +10,16 @@ from bb_reversion_strategy import BBReversionStrategy
 from notify import send_telegram, send_startup_message
 
 class IntegratedSwitcher:
+    # Minimum hold time (hours) before checking exit conditions
+    # Williams %R oscillates too fast on hourly — exits in 1 bar without this
+    WR_MIN_HOLD_HOURS = 6
+
     def __init__(self, paper_trading=True):
         self.library_file = 'strategy_library.json'
         self.paper_trading = paper_trading
         self.position = None
         self.entry_price = 0
+        self.entry_time = None
         self.trades_log = []
 
         # Regime change tracking for force-sell
@@ -66,6 +71,7 @@ class IntegratedSwitcher:
             # Enter position
             self.position = 'LONG'
             self.entry_price = signal['price']
+            self.entry_time = datetime.now()
             
             print(f"\n🟢 BUY EXECUTED")
             print(f"   Price: ${signal['price']:,.2f}")
@@ -100,6 +106,7 @@ class IntegratedSwitcher:
             
             self.position = None
             self.entry_price = 0
+            self.entry_time = None
             self.stop_price = None
             self.take_profit_price = None
             self.high_watermark = None
@@ -151,11 +158,21 @@ class IntegratedSwitcher:
 
         self.position = None
         self.entry_price = 0
+        self.entry_time = None
         self.stop_price = None
         self.take_profit_price = None
         self.high_watermark = None
         self.last_atr = None
         self.active_strategy_name = None
+
+    def is_within_hold_period(self):
+        """Check if current WR position is still within minimum hold period"""
+        if self.active_strategy_name != 'Williams %R Mean Reversion':
+            return False
+        if self.entry_time is None:
+            return False
+        hours_held = (datetime.now() - self.entry_time).total_seconds() / 3600
+        return hours_held < self.WR_MIN_HOLD_HOURS
 
     def fetch_current_price(self, symbol='BTC-USD'):
         """Lightweight price check — just current price, no candle history"""
@@ -184,14 +201,15 @@ class IntegratedSwitcher:
                 self.high_watermark = price
                 self.stop_price = self.high_watermark - (1.5 * self.last_atr)
 
-        # Check take-profit
+        # Check take-profit (suppressed during WR hold period)
         sell_reason = None
-        if self.take_profit_price and price >= self.take_profit_price:
+        in_hold = self.is_within_hold_period()
+        if self.take_profit_price and price >= self.take_profit_price and not in_hold:
             sell_reason = f'Take-profit hit (${self.take_profit_price:,.2f}) — 5-min monitor'
-        # Check stop loss
-        elif self.stop_price and price <= self.stop_price:
+        # Check stop loss (suppressed during WR hold period)
+        elif self.stop_price and price <= self.stop_price and not in_hold:
             sell_reason = f'Stop loss hit (${self.stop_price:,.2f}) — 5-min monitor'
-        # Emergency stop: 5% below entry regardless of strategy
+        # Emergency stop: 5% below entry ALWAYS applies (even during hold period)
         elif price <= self.entry_price * 0.95:
             sell_reason = f'Emergency stop (-5% from entry ${self.entry_price:,.2f})'
 
@@ -226,7 +244,11 @@ class IntegratedSwitcher:
         else:
             stop_info = f" | Stop: ${self.stop_price:,.2f}" if self.stop_price else ""
             tp_info = f" | TP: ${self.take_profit_price:,.2f}" if self.take_profit_price else ""
-            print(f"   📡 [{now}] BTC: ${price:,.2f} | P&L: {current_pnl:+.2f}%{stop_info}{tp_info}")
+            hold_info = ""
+            if in_hold:
+                hours_held = (datetime.now() - self.entry_time).total_seconds() / 3600
+                hold_info = f" | Hold: {hours_held:.1f}/{self.WR_MIN_HOLD_HOURS}h"
+            print(f"   📡 [{now}] BTC: ${price:,.2f} | P&L: {current_pnl:+.2f}%{stop_info}{tp_info}{hold_info}")
 
     def run_once(self):
         """Single iteration"""
@@ -279,10 +301,24 @@ class IntegratedSwitcher:
         else:
             signal = {'signal': 'HOLD', 'reason': 'Strategy not implemented'}
 
-        # 4. Execute
+        # 4. Suppress WR exit signals during minimum hold period
+        if (signal['signal'] == 'SELL' and self.position
+                and self.is_within_hold_period()):
+            hours_held = (datetime.now() - self.entry_time).total_seconds() / 3600
+            hours_left = self.WR_MIN_HOLD_HOURS - hours_held
+            print(f"\n⏳ HOLD (WR min hold: {hours_held:.1f}h elapsed, {hours_left:.1f}h remaining)")
+            print(f"   Original signal: SELL ({signal.get('reason', '')})")
+            signal = {
+                'signal': 'HOLD',
+                'reason': f'WR min hold period ({hours_held:.1f}/{self.WR_MIN_HOLD_HOURS}h)',
+                'price': signal['price'],
+                'time': signal.get('time', datetime.now().isoformat())
+            }
+
+        # 5. Execute
         self.execute_trade(signal)
 
-        # 5. Update stop/take-profit tracking for 5-min monitoring
+        # 6. Update stop/take-profit tracking for 5-min monitoring
         if self.position:
             self.active_strategy_name = strategy['name']
             atr = signal.get('atr')
@@ -313,7 +349,7 @@ class IntegratedSwitcher:
             if self.take_profit_price:
                 print(f"   🎯  Take-profit: ${self.take_profit_price:,.2f}")
 
-        # 6. Stats
+        # 7. Stats
         if len(self.trades_log) > 0:
             print(f"\n📊 Session Stats:")
             print(f"   Total Trades: {len([t for t in self.trades_log if t['action'] == 'SELL'])}")

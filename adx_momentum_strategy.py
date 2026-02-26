@@ -122,31 +122,18 @@ class ADXMomentumStrategy:
         # 2. +DI > -DI
         plus_di_above = current['plus_di'] > current['minus_di']
 
-        # 3. +DI crossed above -DI within last 15 bars
-        di_cross_recent = False
-        for offset in range(0, 15):
-            idx = len(df) - 1 - offset
-            if idx >= 1:
-                bar = df.iloc[idx]
-                bar_prev = df.iloc[idx - 1]
-                if (not pd.isna(bar['plus_di']) and not pd.isna(bar['minus_di'])
-                        and not pd.isna(bar_prev['plus_di']) and not pd.isna(bar_prev['minus_di'])):
-                    if bar['plus_di'] > bar['minus_di'] and bar_prev['plus_di'] <= bar_prev['minus_di']:
-                        di_cross_recent = True
-                        break
+        # 3. RSI between 30-80
+        rsi_ok = 30 <= current['rsi'] <= 80
 
-        # 4. RSI between 35-78
-        rsi_ok = 35 <= current['rsi'] <= 78
-
-        # 5. Price above SMA(50)
+        # 4. Price above SMA(50)
         price_above_sma = current['close'] > current['sma_50']
 
-        if adx_above_20 and adx_rising and plus_di_above and di_cross_recent and rsi_ok and price_above_sma:
+        if adx_above_20 and adx_rising and plus_di_above and rsi_ok and price_above_sma:
             self.entry_price = float(current['close'])
             self.high_watermark = float(current['close'])
             return {
                 'signal': 'BUY',
-                'reason': 'ADX momentum thrust: ADX rising, +DI crossover, RSI confirming uptrend',
+                'reason': 'ADX momentum thrust: ADX rising, +DI dominant, RSI confirming uptrend',
                 'price': float(current['close']),
                 'adx': float(current['adx']),
                 'plus_di': float(current['plus_di']),
