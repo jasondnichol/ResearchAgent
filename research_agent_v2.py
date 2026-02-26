@@ -1,12 +1,15 @@
 """Regime-Aware Strategy Research Agent"""
+import os
 import anthropic
 import json
 from datetime import datetime
+from dotenv import load_dotenv
 from market_regime import MarketRegimeDetector
 
 def get_api_key():
-    """Get Claude API key"""
-    return "***REDACTED***"
+    """Get Claude API key from environment"""
+    load_dotenv()
+    return os.getenv("CLAUDE_API_KEY")
 
 class RegimeAwareResearchAgent:
     def __init__(self):

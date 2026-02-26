@@ -1,12 +1,15 @@
 """Strategy Research Agent - Finds and analyzes trading strategies"""
+import os
 import anthropic
 import json
 from datetime import datetime
 import subprocess
+from dotenv import load_dotenv
 
 def get_api_key():
-    """Get Claude API key"""
-    return "***REDACTED***"
+    """Get Claude API key from environment"""
+    load_dotenv()
+    return os.getenv("CLAUDE_API_KEY")
 
 class ResearchAgent:
     def __init__(self):

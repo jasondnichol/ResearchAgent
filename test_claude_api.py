@@ -1,16 +1,11 @@
 """Test Claude API connection"""
+import os
 import anthropic
-import subprocess
+from dotenv import load_dotenv
 
-# Get API key from Windows Credential Manager
 def get_api_key():
-    result = subprocess.run(
-        ['cmdkey', '/list'],
-        capture_output=True,
-        text=True
-    )
-    # For now, just use the key directly (we'll improve this)
-    return "***REDACTED***"
+    load_dotenv()
+    return os.getenv("CLAUDE_API_KEY")
 
 # Test the API
 def test_api():

@@ -1,10 +1,13 @@
 """Research strategies specifically for TRENDING markets"""
+import os
 import anthropic
 import json
 from datetime import datetime
+from dotenv import load_dotenv
 
 def get_api_key():
-    return "***REDACTED***"
+    load_dotenv()
+    return os.getenv("CLAUDE_API_KEY")
 
 class TrendingResearchAgent:
     def __init__(self):
