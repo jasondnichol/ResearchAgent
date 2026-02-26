@@ -1,5 +1,8 @@
-# Secrets
+# Secrets & keys
 .env
+*.pem
+*.key
+credentials*.json
 
 # Python
 __pycache__/
@@ -8,8 +11,12 @@ venv/
 
 # Cache and data files
 btc_4year_cache.json
+btc_4year_*_cache.json
+btc_4year_hourly_enriched.json
 classified_regimes.json
 current_regime.json
+cache_daily/
+bot_state.json
 
 # Backtest result JSONs (timestamped)
 backtest_*.json
