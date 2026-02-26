@@ -8,6 +8,7 @@ Architecture:
   - Trailing stop monitoring every 30 minutes
   - Max 4 concurrent positions, 2% risk per trade
   - Partial profit taking at +10% and +20%
+  - BTC bull filter: only enter when BTC > SMA(200) AND SMA(50) > SMA(200)
   - Telegram notifications for all trades
 
 Coins: BTC, ETH, SOL, XRP, SUI, LINK, ADA, NEAR
@@ -18,6 +19,7 @@ import time
 import os
 import requests
 import logging
+import pandas as pd
 from datetime import datetime, timezone, timedelta
 from donchian_breakout_strategy import DonchianBreakoutStrategy
 from notify import send_telegram, setup_logging
@@ -54,6 +56,12 @@ MAX_POSITIONS = 4
 RISK_PER_TRADE_PCT = 2.0  # risk 2% of equity per trade
 STARTING_CAPITAL = 10000.0  # paper trading starting balance
 EMERGENCY_STOP_PCT = 15.0  # emergency stop 15% below entry
+
+# Bull market filter (BTC macro gate)
+BULL_FILTER_ENABLED = True
+BULL_SMA_FAST = 50   # SMA(50) must be above SMA(200) (golden cross)
+BULL_SMA_SLOW = 200  # BTC close must be above SMA(200)
+BULL_LOOKBACK = 220  # candles to fetch for SMA(200) computation
 
 # Timing
 DAILY_CHECK_HOUR = 0      # UTC hour for daily signal check
@@ -164,6 +172,54 @@ class DonchianMultiCoinBot:
             except Exception as e:
                 self.logger.warning(f"Price fetch failed for {symbol}: {e}")
         return prices
+
+    # ------------------------------------------------------------------
+    # BULL MARKET FILTER
+    # ------------------------------------------------------------------
+
+    def check_bull_filter(self):
+        """Check if BTC is in a bull market.
+
+        Bull = BTC close > SMA(200) AND SMA(50) > SMA(200).
+        Returns (is_bull, details_dict).
+        """
+        if not BULL_FILTER_ENABLED:
+            return True, {'status': 'DISABLED'}
+
+        try:
+            url = f"{self.coinbase_api}/products/BTC-USD/candles"
+            params = {'granularity': 86400}
+            response = requests.get(url, params=params, timeout=15)
+            data = response.json()
+
+            df = pd.DataFrame(data[:BULL_LOOKBACK], columns=['time', 'low', 'high', 'open', 'close', 'volume'])
+            df = df.sort_values('time').reset_index(drop=True)
+
+            if len(df) < BULL_SMA_SLOW:
+                self.logger.warning(f"Bull filter: only {len(df)} candles, need {BULL_SMA_SLOW}")
+                return True, {'status': 'INSUFFICIENT_DATA'}
+
+            sma_fast = df['close'].rolling(window=BULL_SMA_FAST).mean().iloc[-1]
+            sma_slow = df['close'].rolling(window=BULL_SMA_SLOW).mean().iloc[-1]
+            btc_close = float(df['close'].iloc[-1])
+
+            above_200 = btc_close > sma_slow
+            golden_cross = sma_fast > sma_slow
+            is_bull = above_200 and golden_cross
+
+            details = {
+                'status': 'BULL' if is_bull else 'BEAR',
+                'btc_close': btc_close,
+                'sma_50': round(float(sma_fast), 2),
+                'sma_200': round(float(sma_slow), 2),
+                'above_200': above_200,
+                'golden_cross': golden_cross,
+            }
+            return is_bull, details
+
+        except Exception as e:
+            self.logger.error(f"Bull filter check failed: {e}")
+            return True, {'status': 'ERROR', 'error': str(e)}
 
     # ------------------------------------------------------------------
     # PORTFOLIO HELPERS
@@ -392,30 +448,45 @@ class DonchianMultiCoinBot:
             except Exception as e:
                 self.logger.error(f"Exit check failed for {symbol}: {e}")
 
-        # Check entries for coins we're not in
+        # Check bull filter before scanning for entries
+        is_bull, bull_details = self.check_bull_filter()
+        bull_status = bull_details.get('status', 'UNKNOWN')
+        if bull_details.get('btc_close'):
+            print(f"\nBull filter: {bull_status} | BTC: ${bull_details['btc_close']:,.2f} | "
+                  f"SMA50: ${bull_details['sma_50']:,.2f} | SMA200: ${bull_details['sma_200']:,.2f}")
+        else:
+            print(f"\nBull filter: {bull_status}")
+        self.logger.info(f"Bull filter: {bull_status} | {bull_details}")
+
+        # Check entries for coins we're not in (gated by bull filter)
         print(f"\nChecking entries...")
-        for symbol in COIN_UNIVERSE:
-            if symbol in self.positions:
-                continue
-            if len(self.positions) >= MAX_POSITIONS:
-                print(f"  Max positions reached, skipping remaining")
-                break
+        if not is_bull:
+            print(f"  ENTRIES BLOCKED — bull filter is {bull_status}")
+            print(f"  BTC must be above SMA(200) with golden cross to enter new positions")
+            self.logger.info(f"Entries blocked by bull filter: {bull_status}")
+        else:
+            for symbol in COIN_UNIVERSE:
+                if symbol in self.positions:
+                    continue
+                if len(self.positions) >= MAX_POSITIONS:
+                    print(f"  Max positions reached, skipping remaining")
+                    break
 
-            try:
-                strategy = self.strategies[symbol]
-                signal = strategy.generate_signal(symbol)
+                try:
+                    strategy = self.strategies[symbol]
+                    signal = strategy.generate_signal(symbol)
 
-                if signal['signal'] == 'BUY':
-                    atr = signal.get('atr', 0)
-                    self.execute_buy(symbol, signal['price'], atr, signal['reason'], prices)
-                else:
-                    print(f"  {symbol}: {signal['signal']} — {signal['reason']}")
+                    if signal['signal'] == 'BUY':
+                        atr = signal.get('atr', 0)
+                        self.execute_buy(symbol, signal['price'], atr, signal['reason'], prices)
+                    else:
+                        print(f"  {symbol}: {signal['signal']} — {signal['reason']}")
 
-                time.sleep(0.3)
+                    time.sleep(0.3)
 
-            except Exception as e:
-                self.logger.error(f"Entry check failed for {symbol}: {e}")
-                print(f"  {symbol}: ERROR — {e}")
+                except Exception as e:
+                    self.logger.error(f"Entry check failed for {symbol}: {e}")
+                    print(f"  {symbol}: ERROR — {e}")
 
         # Daily summary
         equity = self.total_equity(prices)
@@ -494,6 +565,15 @@ class DonchianMultiCoinBot:
         total_return = ((equity - STARTING_CAPITAL) / STARTING_CAPITAL) * 100
         pnl_sign = "+" if total_return >= 0 else ""
 
+        # Bull filter status
+        is_bull, bull_details = self.check_bull_filter()
+        bull_emoji = "🟢" if is_bull else "🔴"
+        bull_status = bull_details.get('status', 'UNKNOWN')
+        bull_line = ""
+        if BULL_FILTER_ENABLED and bull_details.get('btc_close'):
+            bull_line = (f"{bull_emoji} Bull filter: <b>{bull_status}</b> "
+                         f"(BTC ${bull_details['btc_close']:,.0f} vs SMA200 ${bull_details['sma_200']:,.0f})\n")
+
         pos_lines = []
         for sym, pos in self.positions.items():
             current = prices.get(sym, pos['entry_price'])
@@ -510,7 +590,8 @@ class DonchianMultiCoinBot:
             f"💼 Equity: <b>${equity:,.0f}</b>\n"
             f"{'🟢' if total_return >= 0 else '🔴'} Return: <b>{pnl_sign}{total_return:.1f}%</b>\n"
             f"💵 Cash: ${self.cash:,.0f}\n"
-            f"📊 Positions: {len(self.positions)}/{MAX_POSITIONS}\n\n"
+            f"📊 Positions: {len(self.positions)}/{MAX_POSITIONS}\n"
+            f"{bull_line}\n"
             f"<b>Open Positions:</b>\n{pos_text}\n\n"
             f"🏷 Mode: {'PAPER' if self.paper_trading else 'LIVE'}\n"
             f"🕐 {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}"
@@ -530,12 +611,23 @@ class DonchianMultiCoinBot:
         print(f"Coins: {', '.join(COIN_UNIVERSE)}")
         print(f"Max positions: {MAX_POSITIONS}")
         print(f"Risk per trade: {RISK_PER_TRADE_PCT}%")
+        print(f"Bull filter: {'ON' if BULL_FILTER_ENABLED else 'OFF'}")
         print(f"Daily check: {DAILY_CHECK_HOUR:02d}:{DAILY_CHECK_MINUTE:02d} UTC")
         print(f"Stop check: every {STOP_CHECK_INTERVAL // 60} min")
         print("=" * 80)
 
+        # Check bull filter on startup
+        is_bull, bull_details = self.check_bull_filter()
+        bull_status = bull_details.get('status', 'UNKNOWN')
+        bull_emoji = "🟢" if is_bull else "🔴"
+        print(f"Bull filter: {bull_status}")
+
         # Send startup message
         equity = self.total_equity()
+        bull_line = ""
+        if BULL_FILTER_ENABLED and bull_details.get('btc_close'):
+            bull_line = (f"{bull_emoji} Bull filter: <b>{bull_status}</b> "
+                         f"(BTC ${bull_details['btc_close']:,.0f} vs SMA200 ${bull_details['sma_200']:,.0f})\n")
         msg = (
             f"🚀 <b>DONCHIAN BOT STARTED</b>\n"
             f"━━━━━━━━━━━━━━━\n"
@@ -543,6 +635,7 @@ class DonchianMultiCoinBot:
             f"🪙 Coins: {len(COIN_UNIVERSE)}\n"
             f"💼 Equity: ${equity:,.0f}\n"
             f"📈 Positions: {len(self.positions)}/{MAX_POSITIONS}\n"
+            f"{bull_line}"
             f"🏷 Mode: {'PAPER' if self.paper_trading else 'LIVE'}\n"
             f"🕐 {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}"
         )
@@ -592,9 +685,6 @@ class DonchianMultiCoinBot:
 # ============================================================================
 # ENTRY POINT
 # ============================================================================
-
-# Need pandas for indicator calculations in daily_check
-import pandas as pd
 
 def main():
     bot = DonchianMultiCoinBot(paper_trading=True)
