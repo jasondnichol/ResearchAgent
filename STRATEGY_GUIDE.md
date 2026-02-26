@@ -253,6 +253,32 @@ Tested 7 variants combining pyramiding (add to winners at +15%) and exit tuning 
 
 The 4x ATR + pyramid variant was selected for production. It flipped the OOS from -3.2% loss to +4.9% gain while cutting drawdown from 12.5% to 8.2%.
 
+### Entry Filter Tests (Weekly MTF + ADX Conviction)
+
+Tested adding weekly multi-timeframe confirmation (weekly close > 21-week EMA) and ADX conviction filters (ADX > 22 or > 25) on top of the Phase 3 winner. **Neither improved OOS performance.**
+
+| Variant | Full Period | OOS Return | OOS PF |
+|---------|------------|------------|--------|
+| Baseline (4x ATR + pyramid) | +80.9% | +4.9% | 1.60 |
+| + Weekly MTF | +55.7% | +3.8% | 1.47 |
+| + ADX > 22 | +48.5% | -2.4% | 0.74 |
+| + Weekly MTF + ADX > 22 | +35.6% | -2.4% | 0.74 |
+
+The existing entry filters (volume confirmation + EMA trend + bull filter) already capture signal quality effectively. ADX hurt performance because breakouts often start when ADX is low (the trend is just beginning). Adding more filters on a strategy with 66-90 trades just starved it of opportunities.
+
+### Coin Expansion Test (Phase 4)
+
+Screened 16 candidate coins on Coinbase. Several showed strong individual results (SEI +231%, FET +145%, SHIB +141%, DOGE +103%), but expanding the portfolio from 8 to 18 coins actually **hurt performance**:
+
+| Universe | Full Period | OOS Return | OOS PF | OOS MaxDD |
+|----------|------------|------------|--------|-----------|
+| Current 8 coins | +82.1% | +3.5% | 1.38 | 9.2% |
+| Expanded 18 coins | +77.3% | -2.7% | 0.76 | 9.1% |
+
+With max 4 concurrent positions, more coins create competition for position slots rather than more opportunities. New coins sometimes displaced better-performing incumbents. Every OOS trade from a new coin was a loser. **The current 8-coin universe was confirmed as optimal.**
+
+Coins tested but not added: DOGE, DOT, LTC, UNI, ATOM, AAVE, FIL, SHIB, FET, OP, INJ, APT, ARB, SEI, TIA, RENDER. Coins with too little Coinbase history to test: BNB, TON, HYPE (all listed in late 2025/2026).
+
 ### Key Backtest Files
 
 | File | Purpose |
@@ -261,6 +287,8 @@ The 4x ATR + pyramid variant was selected for production. It flipped the OOS fro
 | `backtest_walkforward.py` | Walk-forward validation + slippage stress test |
 | `backtest_bull_filter.py` | Bull filter backtest + walk-forward revalidation |
 | `backtest_phase3.py` | Phase 3 pyramiding + exit tuning variants |
+| `backtest_filters.py` | Entry filter tests (weekly MTF + ADX conviction) |
+| `backtest_coin_expansion.py` | Phase 4 coin expansion screening |
 | `regime_backtester.py` | Regime-specific backtesting (hourly, legacy) |
 | `cache_daily/` | Cached daily candles per coin |
 
@@ -313,11 +341,12 @@ We use 0.45% per side in backtests (conservative estimate for $1K-$10K tier). A 
 ## What's Next
 
 1. Monitor Donchian paper trading over 60-90 days (through current correction and any rebound)
-2. ~~Phase 3: Test pyramiding and exit tuning~~ **DONE** — 4x ATR + pyramid deployed (Feb 26, 2026)
-3. Phase 4: Expand coin universe (add 4-6 more coins, re-backtest)
-4. Evaluate dropping NEAR and XRP if performance stays negative after next bull leg
-5. Consider live trading with $1,000-$2,000 after validation
-6. Integrate into TradeSavvy dashboard
+2. ~~Phase 3: Pyramiding + exit tuning~~ **DONE** — 4x ATR + pyramid deployed (Feb 26, 2026)
+3. ~~Phase 4: Coin expansion~~ **TESTED** — 16 candidates screened, current 8 coins confirmed optimal
+4. ~~Entry filters (weekly MTF, ADX)~~ **TESTED** — Neither improved OOS performance
+5. Evaluate selective coin swaps (e.g., DOGE for NEAR) after paper trading validation
+6. Consider live trading with $1,000-$2,000 after validation
+7. Integrate into TradeSavvy dashboard
 
 ---
 

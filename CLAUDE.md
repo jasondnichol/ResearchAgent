@@ -56,6 +56,8 @@ Coinbase Public API → Daily Candles → Donchian Strategy → Signal → Trade
 | `backtest_walkforward.py` | Walk-forward validation + slippage stress test |
 | `backtest_bull_filter.py` | Bull filter backtest + walk-forward revalidation |
 | `backtest_phase3.py` | Phase 3 pyramiding + exit tuning variants |
+| `backtest_filters.py` | Batch 1: weekly MTF + ADX conviction filter tests |
+| `backtest_coin_expansion.py` | Phase 4: coin expansion screening + portfolio test |
 | `market_regime.py` | `RegimeClassifier` (legacy, kept for reference) |
 | `integrated_switcher.py` | Old hourly regime-switching bot (deprecated) |
 | `williams_r_strategy.py` | Williams %R signal generation (legacy) |
@@ -126,10 +128,11 @@ Backtests use 0.45% per side (conservative for $1K-$10K tier).
 
 1. Monitor Donchian paper trading over 60-90 days (through correction and any rebound)
 2. ~~Phase 3: Pyramiding + exit tuning~~ **DONE** — 4x ATR + pyramid deployed (Feb 26, 2026)
-3. Phase 4: Expand coin universe (add 4-6 more coins, re-backtest)
-4. Evaluate dropping NEAR/XRP after next bull leg
-5. Consider live trading with $1,000-$2,000 after validation
-6. Integrate into TradeSavvy dashboard
+3. ~~Phase 4: Expand coin universe~~ **TESTED** — 16 candidates screened, expansion hurt OOS due to position slot competition. Current 8 coins confirmed optimal for max 4 positions.
+4. ~~Entry filters (weekly MTF, ADX)~~ **TESTED** — Neither improved OOS. Current signal quality is already high.
+5. Evaluate selective coin swaps (e.g., DOGE for NEAR) after paper trading validation
+6. Consider live trading with $1,000-$2,000 after validation
+7. Integrate into TradeSavvy dashboard
 
 ## Important Rules
 
