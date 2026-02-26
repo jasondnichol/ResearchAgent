@@ -25,6 +25,7 @@ import pandas as pd
 from datetime import datetime, timezone, timedelta
 from donchian_breakout_strategy import DonchianBreakoutStrategy
 from notify import send_telegram, setup_logging
+from supabase_sync import SupabaseSync
 
 # ============================================================================
 # CONFIGURATION
@@ -100,6 +101,9 @@ class DonchianMultiCoinBot:
 
         # Logging
         self.logger, self.trade_logger = setup_logging()
+
+        # Supabase sync (fire-and-forget, never crashes the bot)
+        self.sync = SupabaseSync()
 
         # Load saved state if exists
         self.load_state()
@@ -316,6 +320,15 @@ class DonchianMultiCoinBot:
         )
         send_telegram(msg)
 
+        # Sync to Supabase
+        self.sync.sync_position_open(symbol, self.positions[symbol])
+        self.sync.sync_trade(symbol=symbol, action="BUY",
+                             entry_price=price, size_usd=size,
+                             trading_mode='paper' if self.paper_trading else 'live')
+        self.sync.sync_event("trade", f"BUY {symbol} @ ${price:,.2f} (${size:,.0f})",
+                             {"action": "BUY", "symbol": symbol, "price": price,
+                              "size_usd": size, "stop_price": stop_price})
+
     def execute_sell(self, symbol, price, reason, fraction=1.0):
         """Close (or partially close) a position"""
         if symbol not in self.positions:
@@ -365,6 +378,27 @@ class DonchianMultiCoinBot:
             f"🏷 Mode: {mode}"
         )
         send_telegram(msg)
+
+        # Sync to Supabase
+        if is_partial:
+            trade_action = "PARTIAL_TP1" if "TP1" in reason else "PARTIAL_TP2"
+        else:
+            trade_action = "SELL"
+        self.sync.sync_trade(symbol=symbol, action=trade_action,
+                             entry_price=pos['entry_price'], exit_price=price,
+                             size_usd=sell_size, pnl_pct=pnl_pct, pnl_usd=pnl_usd,
+                             exit_reason=reason, hold_days=hold_days,
+                             trading_mode='paper' if self.paper_trading else 'live')
+        if is_partial:
+            self.sync.sync_position_update(symbol, pos)
+        else:
+            self.sync.sync_position_close(symbol)
+        self.sync.sync_event("trade",
+                             f"{trade_action} {symbol} @ ${price:,.2f} ({pnl_sign}{pnl_pct:.1f}%)",
+                             {"action": trade_action, "symbol": symbol,
+                              "entry_price": pos['entry_price'], "exit_price": price,
+                              "pnl_pct": round(pnl_pct, 2), "pnl_usd": round(pnl_usd, 2),
+                              "reason": reason})
 
     # ------------------------------------------------------------------
     # PYRAMIDING (add to winners)
@@ -422,6 +456,17 @@ class DonchianMultiCoinBot:
             f"🏷 Mode: {mode}"
         )
         send_telegram(msg)
+
+        # Sync to Supabase
+        self.sync.sync_position_update(symbol, pos)
+        self.sync.sync_trade(symbol=symbol, action="PYRAMID",
+                             entry_price=price, size_usd=add_size,
+                             trading_mode='paper' if self.paper_trading else 'live')
+        self.sync.sync_event("trade",
+                             f"PYRAMID {symbol} @ ${price:,.2f} (+{gain_pct:.1f}%)",
+                             {"action": "PYRAMID", "symbol": symbol, "price": price,
+                              "add_size": add_size, "total_size": pos['size_usd'],
+                              "gain_pct": round(gain_pct, 1)})
 
     # ------------------------------------------------------------------
     # DAILY SIGNAL CHECK
@@ -598,6 +643,14 @@ class DonchianMultiCoinBot:
         total_return = ((equity - STARTING_CAPITAL) / STARTING_CAPITAL) * 100
         print(f"\nPortfolio: ${equity:,.0f} ({total_return:+.1f}% total return)")
 
+        # Sync daily check event to Supabase
+        is_bull_dc, bull_dc = self.check_bull_filter()
+        self.sync.sync_event("daily_check",
+                             f"Daily scan: {len(self.positions)}/{MAX_POSITIONS} positions, "
+                             f"${equity:,.0f} equity, bull={'BULL' if is_bull_dc else 'BEAR'}",
+                             {"equity": round(equity, 2), "positions": len(self.positions),
+                              "bull_status": "BULL" if is_bull_dc else "BEAR"})
+
     # ------------------------------------------------------------------
     # TRAILING STOP MONITORING (intra-day)
     # ------------------------------------------------------------------
@@ -627,6 +680,7 @@ class DonchianMultiCoinBot:
                     if pos['stop_price'] > old_stop:
                         print(f"  {symbol}: Stop ratcheted ${old_stop:,.2f} -> ${pos['stop_price']:,.2f}")
                 self.save_state()
+                self.sync.sync_position_update(symbol, pos)
 
             # Check trailing stop
             sell_reason = None
@@ -703,6 +757,18 @@ class DonchianMultiCoinBot:
         )
         send_telegram(msg)
 
+        # Sync equity snapshot to Supabase
+        positions_value = sum(
+            pos['size_usd'] * (prices.get(sym, pos['entry_price']) / pos['entry_price'])
+            for sym, pos in self.positions.items()
+        )
+        self.sync.sync_equity_snapshot(
+            equity=equity, cash=self.cash,
+            positions_value=positions_value,
+            positions_count=len(self.positions),
+            bull_filter_status=bull_status,
+            btc_price=bull_details.get('btc_close'))
+
     # ------------------------------------------------------------------
     # MAIN LOOP
     # ------------------------------------------------------------------
@@ -751,6 +817,19 @@ class DonchianMultiCoinBot:
         )
         send_telegram(msg)
 
+        # Sync startup to Supabase
+        self.sync.sync_event("startup",
+                             f"Donchian bot started ({len(COIN_UNIVERSE)} coins, "
+                             f"{'PAPER' if self.paper_trading else 'LIVE'})",
+                             {"coins": COIN_UNIVERSE, "max_positions": MAX_POSITIONS,
+                              "bull_filter": bull_status, "equity": equity})
+        self.sync.sync_equity_snapshot(
+            equity=equity, cash=self.cash,
+            positions_value=equity - self.cash,
+            positions_count=len(self.positions),
+            bull_filter_status=bull_status,
+            btc_price=bull_details.get('btc_close'))
+
         last_daily_check = None
         last_summary = None
 
@@ -785,6 +864,10 @@ class DonchianMultiCoinBot:
             self.save_state()
             equity = self.total_equity()
             total_return = ((equity - STARTING_CAPITAL) / STARTING_CAPITAL) * 100
+            self.sync.sync_event("shutdown",
+                                 f"Bot stopped. Equity: ${equity:,.0f} ({total_return:+.1f}%)",
+                                 {"equity": equity, "total_return": round(total_return, 1),
+                                  "open_positions": len(self.positions)})
             print(f"\nFinal equity: ${equity:,.0f} ({total_return:+.1f}%)")
             print(f"Open positions: {len(self.positions)}")
             for sym, pos in self.positions.items():
