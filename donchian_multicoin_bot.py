@@ -65,7 +65,7 @@ PYRAMID_ENABLED = True
 PYRAMID_GAIN_PCT = 15.0    # add to winner when position is up +15%
 PYRAMID_RISK_PCT = 1.0     # 1% equity risk on the add-on tranche
 
-# Bull market filter (BTC macro gate)
+# Bull market filter (BTC macro gate) — default, overridden by Supabase config
 BULL_FILTER_ENABLED = True
 BULL_SMA_FAST = 50   # SMA(50) must be above SMA(200) (golden cross)
 BULL_SMA_SLOW = 200  # BTC close must be above SMA(200)
@@ -105,8 +105,29 @@ class DonchianMultiCoinBot:
         # Supabase sync (fire-and-forget, never crashes the bot)
         self.sync = SupabaseSync()
 
+        # Bull filter — default from constant, overridden by Supabase config
+        self.bull_filter_enabled = BULL_FILTER_ENABLED
+        self.load_remote_config()
+
         # Load saved state if exists
         self.load_state()
+
+    # ------------------------------------------------------------------
+    # REMOTE CONFIG (from TradeSavvy dashboard)
+    # ------------------------------------------------------------------
+
+    def load_remote_config(self):
+        """Load config from Supabase. Updates bull_filter_enabled.
+        Falls back to local constants if Supabase is unavailable."""
+        try:
+            config = self.sync.load_config()
+            if config:
+                self.bull_filter_enabled = config.get("bull_filter_enabled", BULL_FILTER_ENABLED)
+                self.logger.info(f"[CONFIG] Loaded from Supabase — bull_filter: {'ON' if self.bull_filter_enabled else 'OFF'}")
+            else:
+                self.logger.info("[CONFIG] No remote config found, using local defaults")
+        except Exception as e:
+            self.logger.warning(f"[CONFIG] Failed to load remote config: {e}")
 
     # ------------------------------------------------------------------
     # STATE PERSISTENCE
@@ -196,7 +217,7 @@ class DonchianMultiCoinBot:
         Bull = BTC close > SMA(200) AND SMA(50) > SMA(200).
         Returns (is_bull, details_dict).
         """
-        if not BULL_FILTER_ENABLED:
+        if not self.bull_filter_enabled:
             return True, {'status': 'DISABLED'}
 
         try:
@@ -474,6 +495,9 @@ class DonchianMultiCoinBot:
 
     def daily_check(self):
         """Full daily signal check — entries and indicator-based exits"""
+        # Reload config from dashboard (picks up bull filter toggle, etc.)
+        self.load_remote_config()
+
         now = datetime.now(timezone.utc)
         print(f"\n{'='*80}")
         print(f"DAILY SIGNAL CHECK — {now.strftime('%Y-%m-%d %H:%M UTC')}")
@@ -729,7 +753,7 @@ class DonchianMultiCoinBot:
         bull_emoji = "🟢" if is_bull else "🔴"
         bull_status = bull_details.get('status', 'UNKNOWN')
         bull_line = ""
-        if BULL_FILTER_ENABLED and bull_details.get('btc_close'):
+        if self.bull_filter_enabled and bull_details.get('btc_close'):
             bull_line = (f"{bull_emoji} Bull filter: <b>{bull_status}</b> "
                          f"(BTC ${bull_details['btc_close']:,.0f} vs SMA200 ${bull_details['sma_200']:,.0f})\n")
 
@@ -784,7 +808,7 @@ class DonchianMultiCoinBot:
         print(f"Risk per trade: {RISK_PER_TRADE_PCT}%")
         print(f"Trailing stop: {STRATEGY_PARAMS['atr_mult']}x ATR")
         print(f"Pyramiding: {'ON (+' + str(PYRAMID_GAIN_PCT) + '% / ' + str(PYRAMID_RISK_PCT) + '% risk)' if PYRAMID_ENABLED else 'OFF'}")
-        print(f"Bull filter: {'ON' if BULL_FILTER_ENABLED else 'OFF'}")
+        print(f"Bull filter: {'ON' if self.bull_filter_enabled else 'OFF'}")
         print(f"Daily check: {DAILY_CHECK_HOUR:02d}:{DAILY_CHECK_MINUTE:02d} UTC")
         print(f"Stop check: every {STOP_CHECK_INTERVAL // 60} min")
         print("=" * 80)
@@ -798,7 +822,7 @@ class DonchianMultiCoinBot:
         # Send startup message
         equity = self.total_equity()
         bull_line = ""
-        if BULL_FILTER_ENABLED and bull_details.get('btc_close'):
+        if self.bull_filter_enabled and bull_details.get('btc_close'):
             bull_line = (f"{bull_emoji} Bull filter: <b>{bull_status}</b> "
                          f"(BTC ${bull_details['btc_close']:,.0f} vs SMA200 ${bull_details['sma_200']:,.0f})\n")
         pyramid_line = f"📈 Pyramiding: +{PYRAMID_GAIN_PCT}% / {PYRAMID_RISK_PCT}% risk\n" if PYRAMID_ENABLED else ""

@@ -4,11 +4,12 @@
 
 This is an **automated crypto trading bot** that paper-trades 8 coins on daily candles using a Donchian Channel Breakout strategy. Built by Jason Nichol. The system was originally regime-based (hourly), but pivoted to daily breakouts after Coinbase fees destroyed hourly profitability. Runs 24/7 on AWS EC2.
 
-## Current Status (Feb 26, 2026)
+## Current Status (Feb 27, 2026)
 
 - **Production:** Donchian bot running on EC2 (184.72.84.30) in `screen -S donchian`
 - **Strategy:** Donchian Channel Breakout (daily) + bull filter + 4x ATR trailing + pyramiding
 - **Phase 3 deployed (Feb 26):** 4x ATR trailing stop + pyramid at +15% on new 20-day high
+- **Supabase sync deployed (Feb 27):** Bot syncs trades/positions to TradeSavvy dashboard
 - **Bull filter:** Entries only when BTC > SMA(200) AND SMA(50) > SMA(200). Currently BEAR.
 - **Coins:** BTC, ETH, SOL, XRP, SUI, LINK, ADA, NEAR (8 coins, dropped HBAR/AVAX)
 - **Backtest (4x ATR + pyramid):** 90 trades, 64.4% WR, 2.73 PF, +80.9% return, 13.8% max DD
@@ -130,9 +131,10 @@ Backtests use 0.45% per side (conservative for $1K-$10K tier).
 2. ~~Phase 3: Pyramiding + exit tuning~~ **DONE** — 4x ATR + pyramid deployed (Feb 26, 2026)
 3. ~~Phase 4: Expand coin universe~~ **TESTED** — 16 candidates screened, expansion hurt OOS due to position slot competition. Current 8 coins confirmed optimal for max 4 positions.
 4. ~~Entry filters (weekly MTF, ADX)~~ **TESTED** — Neither improved OOS. Current signal quality is already high.
-5. Evaluate selective coin swaps (e.g., DOGE for NEAR) after paper trading validation
-6. Consider live trading with $1,000-$2,000 after validation
-7. ~~Integrate into TradeSavvy dashboard~~ **DONE** — Full SaaS platform deployed (Feb 26, 2026)
+5. ~~Integrate into TradeSavvy dashboard~~ **DONE** — Full SaaS platform deployed (Feb 26, 2026)
+6. ~~Strategy page configurable~~ **DONE** — Exit rules, position sizing, pyramiding all configurable with validation + per-tab Reset Defaults (Feb 27, 2026)
+7. Evaluate selective coin swaps (e.g., DOGE for NEAR) after paper trading validation
+8. Consider live trading with $1,000-$2,000 after validation
 
 ## Important Rules
 
@@ -148,7 +150,8 @@ Backtests use 0.45% per side (conservative for $1K-$10K tier).
   - Pages: Dashboard, Trades, Performance, Portfolio, Watchlist, Strategy, Backtest, Bot Control, Settings
   - Demo account: demo@tradesavvy.io / demo123 (settings locked, daily reset via GitHub Actions)
   - Portfolio page with Coinbase + CoinGecko live prices
-  - Strategy tooltips, notification toggles, email/password update
+  - Strategy page: fully configurable exit rules, position sizing, pyramiding with server-side validation + per-tab Reset Defaults
+  - Settings: notification toggles, email/password update, Coinbase/Telegram setup guides
   - Local dev: `C:\tradesavvy` (frontend :3000, backend :8000)
 - **TradingBot:** Original bot at C:\TradingBot (superseded by this project)
 
