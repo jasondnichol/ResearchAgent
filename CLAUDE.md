@@ -132,7 +132,7 @@ Backtests use 0.45% per side (conservative for $1K-$10K tier).
 4. ~~Entry filters (weekly MTF, ADX)~~ **TESTED** — Neither improved OOS. Current signal quality is already high.
 5. Evaluate selective coin swaps (e.g., DOGE for NEAR) after paper trading validation
 6. Consider live trading with $1,000-$2,000 after validation
-7. Integrate into TradeSavvy dashboard
+7. ~~Integrate into TradeSavvy dashboard~~ **DONE** — Full SaaS platform deployed (Feb 26, 2026)
 
 ## Important Rules
 
@@ -143,7 +143,13 @@ Backtests use 0.45% per side (conservative for $1K-$10K tier).
 
 ## Related Projects
 
-- **TradeSavvy:** SaaS platform at tradesavvy.io (React + FastAPI + Supabase)
+- **TradeSavvy:** SaaS platform at tradesavvy.io (`jasondnichol/tradesavvy`)
+  - React + FastAPI + Supabase, hosted on Vercel + Railway
+  - Pages: Dashboard, Trades, Performance, Portfolio, Watchlist, Strategy, Backtest, Bot Control, Settings
+  - Demo account: demo@tradesavvy.io / demo123 (settings locked, daily reset via GitHub Actions)
+  - Portfolio page with Coinbase + CoinGecko live prices
+  - Strategy tooltips, notification toggles, email/password update
+  - Local dev: `C:\tradesavvy` (frontend :3000, backend :8000)
 - **TradingBot:** Original bot at C:\TradingBot (superseded by this project)
 
 ## Owner
