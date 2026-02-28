@@ -44,21 +44,38 @@ def main():
     # ==================================================================
     print_header("TEST 1: API Key Configuration")
 
-    api_key = os.getenv('COINBASE_API_KEY')
+    api_key = os.getenv('COINBASE_API_KEY') or os.getenv('API_KEY')
     api_secret = os.getenv('COINBASE_API_SECRET')
+    api_secret_file = os.getenv('API_SECRET_FILE')
 
     has_key = bool(api_key and len(api_key) > 10)
-    has_secret = bool(api_secret and len(api_secret) > 10)
+    # Secret can be inline or in a PEM file
+    has_secret_inline = bool(api_secret and len(api_secret) > 10)
+    has_secret_file = False
+    if api_secret_file:
+        secret_path = api_secret_file
+        if not os.path.isabs(secret_path):
+            secret_path = os.path.join(os.path.dirname(__file__) or '.', secret_path)
+        has_secret_file = os.path.isfile(secret_path)
+    has_secret = has_secret_inline or has_secret_file
 
+    key_source = 'COINBASE_API_KEY' if os.getenv('COINBASE_API_KEY') else 'API_KEY'
     results['api_key'] = print_result(
-        "COINBASE_API_KEY in .env",
+        f"{key_source} in .env",
         has_key,
         f"{api_key[:8]}...{api_key[-4:]}" if has_key else "NOT SET"
     )
+
+    if has_secret_inline:
+        secret_detail = f"inline ({api_secret[:4]}...{api_secret[-4:]})"
+    elif has_secret_file:
+        secret_detail = f"PEM file: {api_secret_file}"
+    else:
+        secret_detail = "NOT SET"
     results['api_secret'] = print_result(
-        "COINBASE_API_SECRET in .env",
+        "API secret",
         has_secret,
-        f"{api_secret[:4]}...{api_secret[-4:]}" if has_secret else "NOT SET"
+        secret_detail
     )
 
     if not has_key or not has_secret:
@@ -66,8 +83,9 @@ def main():
         print(f"    1. Go to https://www.coinbase.com/settings/api")
         print(f"    2. Create new API key with 'View' and 'Trade' permissions")
         print(f"    3. Add to C:\\ResearchAgent\\.env:")
-        print(f"       COINBASE_API_KEY=your_key_here")
-        print(f"       COINBASE_API_SECRET=your_secret_here")
+        print(f"       API_KEY=organizations/.../apiKeys/...")
+        print(f"       API_SECRET_FILE=private_key.pem")
+        print(f"       (or COINBASE_API_KEY + COINBASE_API_SECRET inline)")
         print(f"\n  Continuing with public-only tests...")
 
     # ==================================================================

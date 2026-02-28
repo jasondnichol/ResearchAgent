@@ -72,8 +72,8 @@ class CoinbaseFuturesClient:
 
     def __init__(self, api_key=None, api_secret=None, paper_mode=True,
                  starting_capital=10000.0):
-        self.api_key = api_key or os.getenv('COINBASE_API_KEY')
-        self.api_secret = api_secret or os.getenv('COINBASE_API_SECRET')
+        self.api_key = api_key or os.getenv('COINBASE_API_KEY') or os.getenv('API_KEY')
+        self.api_secret = api_secret or os.getenv('COINBASE_API_SECRET') or self._load_api_secret()
         self.paper_mode = paper_mode
         self.leverage = DEFAULT_LEVERAGE
         self._client = None
@@ -109,6 +109,25 @@ class CoinbaseFuturesClient:
         # Load paper state if exists
         if self.paper_mode:
             self._load_paper_state()
+
+    @staticmethod
+    def _load_api_secret():
+        """Load API secret from COINBASE_API_SECRET env var, or read from PEM file
+        pointed to by API_SECRET_FILE."""
+        secret = os.getenv('COINBASE_API_SECRET')
+        if secret:
+            return secret
+        secret_file = os.getenv('API_SECRET_FILE')
+        if secret_file:
+            # Resolve relative to project root
+            if not os.path.isabs(secret_file):
+                secret_file = os.path.join(os.path.dirname(__file__), secret_file)
+            try:
+                with open(secret_file, 'r') as f:
+                    return f.read()
+            except FileNotFoundError:
+                logger.warning(f"API_SECRET_FILE not found: {secret_file}")
+        return None
 
     # ========================================================================
     # MARKET DATA (always use real API)
@@ -217,17 +236,16 @@ class CoinbaseFuturesClient:
         Returns dict with total_usd_balance, available_margin, etc.
         Or None if not authenticated.
         """
+        if self.paper_mode:
+            return self._paper_balance_summary()
+
         if not self._client or not self.api_key:
-            if self.paper_mode:
-                return self._paper_balance_summary()
             return None
         try:
             resp = self._client.get_futures_balance_summary()
             return resp.to_dict() if hasattr(resp, 'to_dict') else resp
         except Exception as e:
             logger.error(f"Failed to get balance summary: {e}")
-            if self.paper_mode:
-                return self._paper_balance_summary()
             return None
 
     def get_positions(self):
