@@ -124,35 +124,42 @@ class SupabaseSync:
     # ------------------------------------------------------------------
 
     def sync_position_open(self, symbol, position):
-        """Insert a new row into positions after a BUY."""
+        """Insert a new row into positions after a BUY or SHORT."""
         entry_time = position["entry_time"]
         if isinstance(entry_time, datetime):
             entry_time = entry_time.isoformat()
+        side = position.get("side", "LONG")
         data = {
             "user_id": self.user_id,
             "symbol": symbol,
+            "side": side,
             "entry_price": position["entry_price"],
             "entry_time": entry_time,
-            "high_watermark": position["high_watermark"],
+            "high_watermark": position.get("high_watermark"),
+            "low_watermark": position.get("low_watermark"),
             "stop_price": position.get("stop_price"),
             "size_usd": position["size_usd"],
             "partials_taken": position.get("partials_taken", 0),
             "remaining_fraction": position.get("remaining_fraction", 1.0),
             "last_atr": position.get("last_atr"),
             "pyramided": position.get("pyramided", False),
+            "hold_days": position.get("hold_days", 0),
+            "spot_symbol": position.get("spot_symbol"),
         }
         return self._post("positions", data)
 
     def sync_position_update(self, symbol, position):
         """Update an existing position row (stop, partials, pyramid, etc.)."""
         data = {
-            "high_watermark": position["high_watermark"],
+            "high_watermark": position.get("high_watermark"),
+            "low_watermark": position.get("low_watermark"),
             "stop_price": position.get("stop_price"),
             "size_usd": position["size_usd"],
             "partials_taken": position.get("partials_taken", 0),
             "remaining_fraction": position.get("remaining_fraction", 1.0),
             "last_atr": position.get("last_atr"),
             "pyramided": position.get("pyramided", False),
+            "hold_days": position.get("hold_days", 0),
         }
         return self._patch("positions", data,
                            filters={"user_id": self.user_id, "symbol": symbol})
@@ -168,12 +175,14 @@ class SupabaseSync:
 
     def sync_trade(self, symbol, action, entry_price=None, exit_price=None,
                    size_usd=None, pnl_pct=None, pnl_usd=None,
-                   exit_reason=None, hold_days=None, trading_mode="paper"):
+                   exit_reason=None, hold_days=None, trading_mode="paper",
+                   side="LONG"):
         """Insert a row into trade_history for every trade action."""
         data = {
             "user_id": self.user_id,
             "symbol": symbol,
             "action": action,
+            "side": side,
             "entry_price": entry_price,
             "exit_price": exit_price,
             "size_usd": size_usd,
