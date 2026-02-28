@@ -4,22 +4,24 @@
 
 This is an **automated crypto trading bot** that paper-trades 8 coins on daily candles using a Donchian Channel Breakout strategy. Built by Jason Nichol. The system was originally regime-based (hourly), but pivoted to daily breakouts after Coinbase fees destroyed hourly profitability. Runs 24/7 on AWS EC2.
 
-## Current Status (Feb 27, 2026)
+## Current Status (Feb 28, 2026)
 
-- **Production:** Donchian bot running on EC2 (184.72.84.30) in `screen -S donchian`
-- **Strategy:** Dual-mode Donchian Breakout (daily) — longs (spot) + shorts (perpetual futures)
+- **Production:** Tri-mode Donchian bot running on EC2 (184.72.84.30) in `screen -S donchian`
+- **Strategy:** Tri-mode Donchian Breakout (daily) — Spot Long + Futures Long + Futures Short
 - **Phase 3 deployed (Feb 26):** 4x ATR trailing stop + pyramid at +15% on new 20-day high
-- **Phase F3 built (Feb 27):** Dual-mode bot — short-side via Coinbase CFM perpetual futures
+- **Tri-mode bot deployed (Feb 28):** Spot Long + Futures Long (CFM perps, 1-3x leverage) + Futures Short
 - **Supabase sync deployed (Feb 27):** Bot syncs trades/positions to TradeSavvy dashboard
+- **TradeSavvy tri-mode UI deployed (Feb 28):** Dashboard fully supports all 3 modes
 - **Bull filter:** Entries only when BTC > SMA(200) AND SMA(50) > SMA(200). Currently BEAR.
 - **Bear filter:** Short entries when SMA(50) < SMA(200) AND BTC < SMA(200) (death cross). Currently ACTIVE.
-- **Long coins:** BTC, ETH, SOL, XRP, SUI, LINK, ADA, NEAR (8 coins)
-- **Short coins:** BTC, ETH, SOL, XRP, SUI, LINK, ADA, DOGE (8 coins, NEAR replaced by DOGE for perps)
+- **Long coins (spot):** BTC, ETH, SOL, XRP, SUI, LINK, ADA, NEAR (8 coins)
+- **Futures long coins:** BTC, ETH, SOL, XRP, SUI, LINK, ADA, DOGE (8 coins, perp IDs)
+- **Short coins:** BTC, ETH, SOL, XRP, SUI, LINK, ADA, DOGE (8 coins, perp IDs)
 - **Backtest (4x ATR + pyramid):** 90 trades, 64.4% WR, 2.73 PF, +80.9% return, 13.8% max DD
 - **Short backtest (death cross):** 16 trades, 62.5% WR, 2.73 PF, +15.0%, 9.0% DD
 - **Combined long+short:** +110.4% vs +95.3% long-only, DD 13.2% vs 13.8%
 - **Walk-forward OOS:** +4.9% return, 1.60 PF, 70% WR, 8.2% DD (vs baseline -3.2%)
-- **Portfolio:** $10K paper, max 4 concurrent positions (shared pool), 2% risk per trade
+- **Portfolio:** $10K paper, max 4 concurrent positions (shared pool across all 3 modes), 2% risk per trade
 - **Monitoring:** Daily signal check at 00:15 UTC, trailing stops every 30 min
 - **Telegram:** All trades + daily summary at 20:00 UTC
 - **GitHub:** `jasondnichol/ResearchAgent` (pushed, API keys scrubbed from history)
@@ -30,18 +32,22 @@ This is an **automated crypto trading bot** that paper-trades 8 coins on daily c
 ```
 Coinbase Public API → Daily Candles → Donchian Strategy → Signal → Trade Execution → Telegram
                                                                           ↓
-Coinbase CFM API → Perp Futures ──────────────────────── Short Execution ─┘
+Coinbase CFM API → Perp Futures ────── Futures Long + Short Execution ────┘
                                                                           ↓
                                                                    bot_state.json (crash recovery)
 ```
 
-**Dual-mode:** Longs trade spot (Coinbase), shorts trade perpetual futures (Coinbase CFM, paper mode).
+**Tri-mode:** Spot longs trade via Coinbase spot, futures longs and shorts trade via Coinbase CFM perpetual futures (paper mode).
 
-**Dual-loop:**
-- **Daily check (00:15 UTC):** Fetch 60 candles per coin, check long exits → short exits → regime filters → long entries → short entries
-- **Trailing stop check (every 30 min):** Fetch current prices, update high/low watermarks, check stops/TP for both sides
+**Daily check flow (00:15 UTC):**
+1. Long exits → Futures long exits → Short exits
+2. Regime filters (bull + bear)
+3. Long pyramiding → Futures long pyramiding
+4. Long entries → Futures long entries → Short entries
 
-## Donchian Strategy — Long Side (Spot)
+**Trailing stop check (every 30 min):** Fetch current prices, update high/low watermarks, check stops/TP for all 3 sides
+
+## Donchian Strategy — Spot Long
 
 - **Bull filter:** BTC close > SMA(200) AND SMA(50) > SMA(200) — gates long entries
 - **Entry:** Close > 20-day Donchian high + volume > 1.5x avg + price > EMA(21)
@@ -56,7 +62,18 @@ Coinbase CFM API → Perp Futures ───────────────�
 - **4x ATR + pyramid: 90 trades, 64.4% WR, 2.73 PF, +80.9%, 13.8% DD**
 - Walk-forward OOS (2025-2026): +4.9% with Phase 3 vs -3.2% baseline
 
-## Donchian Strategy — Short Side (Perpetual Futures)
+## Donchian Strategy — Futures Long (Perpetual Futures)
+
+- **Same entry/exit logic as Spot Long** but executed via Coinbase CFM perpetual futures
+- **Bull filter:** Same golden cross gate as spot longs
+- **Leverage:** Configurable 1-3x via dashboard (read from Supabase, hard-capped at 3x)
+- **Position sizing:** 2% risk per trade * leverage multiplier, capped at 95% of cash
+- **Pyramiding:** Enabled (same rules as spot, uses leverage)
+- **Coins:** BTC, ETH, SOL, XRP, SUI, LINK, ADA, DOGE (perp IDs, e.g. BTC-PERP-INTX)
+- **Side:** `FUTURES_LONG` — positions keyed by perp ID with `high_watermark` + `spot_symbol`
+- **Supabase actions:** FUTURES_BUY, FUTURES_SELL, FUTURES_PARTIAL_TP1/TP2, FUTURES_PYRAMID
+
+## Donchian Strategy — Futures Short (Perpetual Futures)
 
 - **Bear filter:** SMA(50) < SMA(200) AND BTC close < SMA(200) (death cross) — gates short entries
 - **Entry:** Close < 10-day Donchian low + volume > 2.0x avg + price < EMA(21)
@@ -69,11 +86,17 @@ Coinbase CFM API → Perp Futures ───────────────�
 - **Walk-forward OOS:** +5.8-12.4%, PF 2.37-2.46 (all positive)
 - **Combined long+short:** +110.4% vs +95.3% long-only
 
+## Position Conflict Rules
+
+- Max 4 concurrent positions shared across all 3 modes
+- A coin can only have ONE position across all modes (BTC-USD spot blocks BTC-PERP-INTX futures)
+- Three sides: `LONG` (spot), `FUTURES_LONG` (perps), `SHORT` (perps)
+
 ## Key Files
 
 | File | Purpose |
 |------|---------|
-| `donchian_multicoin_bot.py` | Production bot — dual-mode long+short (runs 24/7 on EC2) |
+| `donchian_multicoin_bot.py` | Production bot — tri-mode Spot Long + Futures Long + Futures Short (runs 24/7 on EC2) |
 | `donchian_breakout_strategy.py` | Donchian signal generation (long + short signals) |
 | `coinbase_futures.py` | Coinbase CFM perpetual futures client (paper + live) |
 | `supabase_sync.py` | Supabase sync for TradeSavvy dashboard |
@@ -161,9 +184,10 @@ Backtests use 0.45% per side (conservative for $1K-$10K tier).
 6. ~~Strategy page configurable~~ **DONE** — Exit rules, position sizing, pyramiding all configurable with validation + per-tab Reset Defaults (Feb 27, 2026)
 7. ~~Phase F1: Futures research~~ **DONE** — Coinbase CFM selected, short backtest validated (Feb 27, 2026)
 8. ~~Phase F2: Exchange integration~~ **DONE** — `coinbase_futures.py` built, 12/12 tests passing (Feb 27, 2026)
-9. ~~Phase F3: Dual-mode bot~~ **DEPLOYED** — Short-side on EC2, Supabase migrated (Feb 28, 2026)
-10. **TradeSavvy dual-mode UI** — Strategy/Trades/Performance/BotControl pages need spot vs futures differentiation
-11. **Monitor dual-mode** — Observe short signals in bear market, validate P&L tracking
+9. ~~Phase F3: Tri-mode bot~~ **DEPLOYED** — Spot Long + Futures Long + Futures Short on EC2 (Feb 28, 2026)
+10. ~~TradeSavvy tri-mode UI~~ **DEPLOYED** — All pages support 3 modes with side filtering (Feb 28, 2026)
+11. ~~Futures Long bot logic~~ **DEPLOYED** — Same Donchian breakout as spot, via CFM perps with 1-3x leverage (Feb 28, 2026)
+12. **Monitor tri-mode** — Observe short signals in bear market, validate futures long when bull returns
 12. Evaluate selective coin swaps (e.g., DOGE for NEAR) after paper trading validation
 13. Consider live trading with $1,000-$2,000 after validation
 
@@ -180,6 +204,8 @@ Backtests use 0.45% per side (conservative for $1K-$10K tier).
 - **TradeSavvy:** SaaS platform at tradesavvy.io (`jasondnichol/tradesavvy`)
   - React + FastAPI + Supabase, hosted on Vercel + Railway
   - Pages: Dashboard, Trades, Performance, Portfolio, Watchlist, Strategy, Backtest, Bot Control, Settings
+  - **Tri-mode UI:** Strategy page has Spot Long / Futures Long / Futures Short / Position Sizing / Coins tabs
+  - Trades/Performance/Bot Control all support side filtering (All/Spot/Futures Long/Futures Short)
   - Demo account: demo@tradesavvy.io / demo123 (settings locked, daily reset via GitHub Actions)
   - Portfolio page with Coinbase + CoinGecko live prices
   - Strategy page: fully configurable exit rules, position sizing, pyramiding with server-side validation + per-tab Reset Defaults

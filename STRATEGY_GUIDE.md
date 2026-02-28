@@ -6,7 +6,7 @@ A complete, plain-English explanation of how this trading system works.
 
 ## What This System Does
 
-ResearchAgent is an automated crypto trading bot that paper-trades on Coinbase. It watches 8 coins on daily candles, waits for breakout signals, enters positions with strict risk management, and exits via trailing stops or partial profit-taking. Everything runs 24/7 on an AWS EC2 server with Telegram alerts for every trade.
+ResearchAgent is an automated crypto trading bot that paper-trades on Coinbase. It runs three modes simultaneously: **Spot Long** (buy breakouts on spot), **Futures Long** (buy breakouts via leveraged perpetual futures), and **Futures Short** (sell breakdowns via perpetual futures). It watches 8 coins on daily candles, waits for breakout/breakdown signals, enters positions with strict risk management, and exits via trailing stops or partial profit-taking. Everything runs 24/7 on an AWS EC2 server with Telegram alerts for every trade.
 
 ---
 
@@ -115,6 +115,23 @@ This filter exists because breakout strategies work in bull markets and get chop
 
 Fewer trades, better win rate, higher profit factor, lower drawdown, and slightly higher returns. The filter removes bad trades without removing good ones.
 
+### Futures Long Mode
+
+The Futures Long mode uses the **exact same entry and exit logic** as Spot Long, but executes trades via Coinbase CFM perpetual futures instead of spot orders. This allows applying leverage (1-3x, configurable via the TradeSavvy dashboard) to amplify returns.
+
+| Feature | Spot Long | Futures Long |
+|---------|-----------|-------------|
+| Entry signal | Same | Same |
+| Exit logic | Same | Same |
+| Pyramiding | 1% risk add | 1% risk add * leverage |
+| Position sizing | 2% risk | 2% risk * leverage |
+| Exchange | Coinbase Spot | Coinbase CFM Perps |
+| Leverage | 1x (fixed) | 1-3x (configurable) |
+| Bull filter | Required | Required + `futures_long_enabled` |
+| Coins | BTC, ETH, SOL, XRP, SUI, LINK, ADA, NEAR | BTC, ETH, SOL, XRP, SUI, LINK, ADA, DOGE |
+
+Futures long is off by default. Users opt in via the TradeSavvy dashboard. Leverage starts at 1x and is hard-capped at 3x in the bot code. The leverage setting is read from Supabase before each daily check.
+
 ### Coins Traded
 
 | Coin | 4-Year Backtest | Status |
@@ -136,20 +153,36 @@ HBAR and AVAX were removed due to consistently poor performance across the full 
 
 ## Bot Architecture
 
+### Tri-Mode Design
+
+The bot operates three trading modes simultaneously:
+
+| Mode | Market | Filter | Direction | Exchange |
+|------|--------|--------|-----------|----------|
+| **Spot Long** | Bull (golden cross) | BTC > SMA(200), SMA(50) > SMA(200) | Buy breakouts | Coinbase Spot |
+| **Futures Long** | Bull (golden cross) | Same as spot + `futures_long_enabled` | Buy breakouts via perps | Coinbase CFM (1-3x leverage) |
+| **Futures Short** | Bear (death cross) | SMA(50) < SMA(200), BTC < SMA(200) | Sell breakdowns via perps | Coinbase CFM |
+
+All three modes share a pool of max 4 concurrent positions. A coin can only have one position across all modes.
+
 ### Dual-Loop Design
 
 ```
 00:15 UTC   Daily signal check (fetch 60 candles per coin, compute all indicators, check entries/exits)
-00:45 UTC   Trailing stop check (fetch current prices, update high watermarks, check stops)
+00:45 UTC   Trailing stop check (fetch current prices, update high/low watermarks, check stops)
 01:15 UTC   Trailing stop check
 ...         (every 30 minutes)
 23:45 UTC   Trailing stop check
 00:15 UTC   Next daily signal check
 ```
 
-The **daily check** (once per day at 00:15 UTC, after the daily candle closes) runs the full strategy: fetches candle history, calculates indicators, checks exit conditions for open positions, evaluates the BTC bull filter, then scans for new entry signals (only if the bull filter passes).
+The **daily check** flow:
+1. Spot long exits → Futures long exits → Short exits
+2. Regime filters (bull + bear)
+3. Spot long pyramiding → Futures long pyramiding
+4. Spot long entries → Futures long entries → Short entries
 
-The **trailing stop check** (every 30 minutes) is lightweight: fetches only the current price from Coinbase's ticker endpoint, updates the high watermark if price has risen, and checks if any stop or take-profit level has been hit.
+The **trailing stop check** (every 30 minutes) is lightweight: fetches only the current price from Coinbase's ticker endpoint, updates the high/low watermark if price has moved, and checks if any stop or take-profit level has been hit for all three modes.
 
 ### State Persistence
 
@@ -328,10 +361,12 @@ We use 0.45% per side in backtests (conservative estimate for $1K-$10K tier). A 
 
 | File | Purpose |
 |------|---------|
-| `donchian_multicoin_bot.py` | Production bot (runs 24/7 on EC2) |
-| `donchian_breakout_strategy.py` | Donchian signal generation |
-| `market_regime.py` | Regime classifier (legacy, kept for reference) |
+| `donchian_multicoin_bot.py` | Production bot — tri-mode (runs 24/7 on EC2) |
+| `donchian_breakout_strategy.py` | Donchian signal generation (long + short) |
+| `coinbase_futures.py` | Coinbase CFM perpetual futures client |
+| `supabase_sync.py` | Supabase sync for TradeSavvy dashboard |
 | `notify.py` | Telegram notifications + file logging |
+| `market_regime.py` | Regime classifier (legacy, kept for reference) |
 | `strategy_library.json` | All approved strategies (current + legacy) |
 | `integrated_switcher.py` | Old hourly regime-switching bot (deprecated) |
 | `.env` | API keys (never committed to git) |
@@ -340,13 +375,13 @@ We use 0.45% per side in backtests (conservative estimate for $1K-$10K tier). A 
 
 ## What's Next
 
-1. Monitor Donchian paper trading over 60-90 days (through current correction and any rebound)
+1. Monitor tri-mode paper trading (Spot Long + Futures Long + Futures Short)
 2. ~~Phase 3: Pyramiding + exit tuning~~ **DONE** — 4x ATR + pyramid deployed (Feb 26, 2026)
 3. ~~Phase 4: Coin expansion~~ **TESTED** — 16 candidates screened, current 8 coins confirmed optimal
 4. ~~Entry filters (weekly MTF, ADX)~~ **TESTED** — Neither improved OOS performance
-5. Evaluate selective coin swaps (e.g., DOGE for NEAR) after paper trading validation
-6. Consider live trading with $1,000-$2,000 after validation
-7. Integrate into TradeSavvy dashboard
+5. ~~Futures integration (F1-F4)~~ **DONE** — Tri-mode bot deployed with TradeSavvy UI (Feb 28, 2026)
+6. Evaluate selective coin swaps (e.g., DOGE for NEAR) after paper trading validation
+7. Consider live trading with $1,000-$2,000 after validation
 
 ---
 
