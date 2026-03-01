@@ -2,8 +2,7 @@
 
 Adds a BTC macro filter to the Donchian strategy:
   - BTC close > 200-day SMA
-  - BTC 50-day SMA > 200-day SMA (golden cross)
-  - Only allow NEW entries when both conditions are true
+  - Only allow NEW entries when this condition is true
   - Exits are unchanged (trailing stops still work normally)
 
 Also tests dynamic risk: 3% per trade in bull, 2% otherwise.
@@ -35,22 +34,19 @@ from backtest_walkforward import (
 def compute_btc_bull_filter(btc_df):
     """Compute daily bull/bear signal from BTC price data.
 
-    Bull = BTC close > SMA(200) AND SMA(50) > SMA(200)
+    Bull = BTC close > SMA(200)
     Returns dict: date -> bool
     """
     df = btc_df.copy()
-    df['sma_50'] = df['close'].rolling(window=50).mean()
     df['sma_200'] = df['close'].rolling(window=200).mean()
 
     bull_filter = {}
     for _, row in df.iterrows():
-        if pd.isna(row['sma_200']) or pd.isna(row['sma_50']):
+        if pd.isna(row['sma_200']):
             bull_filter[row['time'].date()] = False
             continue
 
-        above_200 = row['close'] > row['sma_200']
-        golden_cross = row['sma_50'] > row['sma_200']
-        bull_filter[row['time'].date()] = bool(above_200 and golden_cross)
+        bull_filter[row['time'].date()] = bool(row['close'] > row['sma_200'])
 
     # Stats
     total = len(bull_filter)

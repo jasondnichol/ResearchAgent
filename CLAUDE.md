@@ -12,7 +12,7 @@ This is an **automated crypto trading bot** that paper-trades 8 coins on daily c
 - **Tri-mode bot deployed (Feb 28):** Spot Long + Futures Long (CFM perps, 1-3x leverage) + Futures Short
 - **Supabase sync deployed (Feb 27):** Bot syncs trades/positions to TradeSavvy dashboard
 - **TradeSavvy tri-mode UI deployed (Feb 28):** Dashboard fully supports all 3 modes
-- **Bull filter:** Entries only when BTC > SMA(200) AND SMA(50) > SMA(200). Currently BEAR.
+- **Bull filter:** Entries only when BTC > SMA(200). Currently BEAR. (Relaxed from golden cross — dead zone analysis showed +16.6% improvement)
 - **Bear filter:** Short entries when SMA(50) < SMA(200) AND BTC < SMA(200) (death cross). Currently ACTIVE.
 - **Long coins (spot):** BTC, ETH, SOL, XRP, SUI, LINK, ADA, NEAR (8 coins)
 - **Futures long coins:** BTC, ETH, SOL, XRP, SUI, LINK, ADA, DOGE (8 coins, perp IDs)
@@ -49,7 +49,7 @@ Coinbase CFM API → Perp Futures ────── Futures Long + Short Execut
 
 ## Donchian Strategy — Spot Long
 
-- **Bull filter:** BTC close > SMA(200) AND SMA(50) > SMA(200) — gates long entries
+- **Bull filter:** BTC close > SMA(200) — gates long entries
 - **Entry:** Close > 20-day Donchian high + volume > 1.5x avg + price > EMA(21)
 - **Exit:** 4x ATR(14) trailing stop OR close < 10-day low OR 15% emergency stop
 - **Blow-off:** Tighten stop to 1.5x ATR if volume > 3x avg AND RSI > 80
@@ -65,7 +65,7 @@ Coinbase CFM API → Perp Futures ────── Futures Long + Short Execut
 ## Donchian Strategy — Futures Long (Perpetual Futures)
 
 - **Same entry/exit logic as Spot Long** but executed via Coinbase CFM perpetual futures
-- **Bull filter:** Same golden cross gate as spot longs
+- **Bull filter:** Same BTC > SMA(200) gate as spot longs
 - **Leverage:** Configurable 1-3x via dashboard (read from Supabase, hard-capped at 3x)
 - **Position sizing:** 2% risk per trade * leverage multiplier, capped at 95% of cash
 - **Pyramiding:** Enabled (same rules as spot, uses leverage)

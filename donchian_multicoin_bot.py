@@ -12,7 +12,7 @@ Architecture:
   - Spot Longs: 4x ATR trailing stop, pyramiding at +15%, partial TP at +10%/+20%
   - Futures Longs: same as spot longs but via perps with configurable leverage
   - Shorts: 2x ATR inverted trailing stop, partial TP at -10%/-20%, 30-day max hold
-  - Bull filter (golden cross): gates spot long + futures long entries
+  - Bull filter (price > SMA200): gates spot long + futures long entries
   - Bear filter (death cross): gates short entries
   - Futures via Coinbase CFM perpetual futures (paper_mode default)
   - Telegram notifications for all trades
@@ -73,8 +73,10 @@ PYRAMID_RISK_PCT = 1.0     # 1% equity risk on the add-on tranche
 
 # Bull market filter (BTC macro gate) — default, overridden by Supabase config
 BULL_FILTER_ENABLED = True
-BULL_SMA_FAST = 50   # SMA(50) must be above SMA(200) (golden cross)
+BULL_SMA_FAST = 50   # SMA(50) — still computed for display/bear filter, not used in bull gate
 BULL_SMA_SLOW = 200  # BTC close must be above SMA(200)
+# NOTE: Bull filter relaxed to price > SMA(200) only (no golden cross).
+# Dead zone analysis showed golden cross requirement blocked profitable longs (PF 4.54, 70.8% WR).
 BULL_LOOKBACK = 220  # candles to fetch for SMA(200) computation
 
 # Short-side strategy parameters (from backtest_shorts.py death cross best: L10_A2.0_E15_V2.0)
@@ -478,8 +480,7 @@ class DonchianMultiCoinBot:
             btc_close = float(df['close'].iloc[-1])
 
             above_200 = btc_close > sma_slow
-            golden_cross = sma_fast > sma_slow
-            is_bull = above_200 and golden_cross
+            is_bull = above_200
 
             details = {
                 'status': 'BULL' if is_bull else 'BEAR',
@@ -487,7 +488,6 @@ class DonchianMultiCoinBot:
                 'sma_50': round(float(sma_fast), 2),
                 'sma_200': round(float(sma_slow), 2),
                 'above_200': above_200,
-                'golden_cross': golden_cross,
             }
             return is_bull, details
 
@@ -1524,7 +1524,7 @@ class DonchianMultiCoinBot:
 
         if bull_details.get('btc_close'):
             print(f"\nBull filter: {bull_status} | BTC: ${bull_details['btc_close']:,.2f} | "
-                  f"SMA50: ${bull_details['sma_50']:,.2f} | SMA200: ${bull_details['sma_200']:,.2f}")
+                  f"SMA200: ${bull_details['sma_200']:,.2f}")
         else:
             print(f"\nBull filter: {bull_status}")
         print(f"Bear filter: {bear_status}")
