@@ -30,7 +30,7 @@ import pandas as pd
 from datetime import datetime, timezone, timedelta
 from donchian_breakout_strategy import DonchianBreakoutStrategy
 from coinbase_futures import CoinbaseFuturesClient, SPOT_TO_PERP, PERP_TO_SPOT
-from notify import send_telegram, setup_logging
+from notify import send_telegram, send_telegram_user, setup_logging
 from supabase_sync import SupabaseSync
 
 # ============================================================================
@@ -201,6 +201,10 @@ class DonchianMultiCoinBot:
         # Futures Long — default from constant, overridden by Supabase config
         self.futures_long_enabled = FUTURES_LONG_ENABLED
         self.futures_long_leverage = FUTURES_LONG_LEVERAGE
+        # Per-user Telegram (loaded from Supabase, falls back to .env)
+        self.telegram_bot_token = ""
+        self.telegram_chat_id = ""
+        self.notify_telegram = True
         self.load_remote_config()
 
         # Load saved state if exists
@@ -318,6 +322,11 @@ class DonchianMultiCoinBot:
                 FUTURES_LONG_COIN_UNIVERSE.clear()
                 FUTURES_LONG_COIN_UNIVERSE.extend(fl_coins)
 
+            # ── Telegram per-user credentials ──
+            self.telegram_bot_token = config.get("telegram_bot_token", "")
+            self.telegram_chat_id = config.get("telegram_chat_id", "")
+            self.notify_telegram = config.get("notify_telegram", True)
+
             # ── Recreate strategy instances with updated params ──
             self.strategies = {sym: DonchianBreakoutStrategy(STRATEGY_PARAMS) for sym in COIN_UNIVERSE}
             self.short_strategies = {sym: DonchianBreakoutStrategy(SHORT_STRATEGY_PARAMS) for sym in SHORT_COIN_UNIVERSE}
@@ -335,6 +344,19 @@ class DonchianMultiCoinBot:
 
         except Exception as e:
             self.logger.warning(f"[CONFIG] Failed to load remote config: {e}")
+
+    # ------------------------------------------------------------------
+    # NOTIFICATIONS
+    # ------------------------------------------------------------------
+
+    def send_notification(self, message):
+        """Send Telegram using per-user creds if configured, else fall back to .env."""
+        if not self.notify_telegram:
+            return
+        if self.telegram_bot_token and self.telegram_chat_id:
+            send_telegram_user(message, self.telegram_bot_token, self.telegram_chat_id)
+        else:
+            send_telegram(message)
 
     # ------------------------------------------------------------------
     # STATE PERSISTENCE
@@ -644,7 +666,7 @@ class DonchianMultiCoinBot:
             f"💼 Equity: ${equity:,.0f}\n"
             f"🏷 Mode: {mode}"
         )
-        send_telegram(msg)
+        self.send_notification(msg)
 
         # Sync to Supabase
         self.sync.sync_position_open(symbol, self.positions[symbol])
@@ -703,7 +725,7 @@ class DonchianMultiCoinBot:
             f"💼 Equity: ${equity:,.0f}\n"
             f"🏷 Mode: {mode}"
         )
-        send_telegram(msg)
+        self.send_notification(msg)
 
         # Sync to Supabase
         if is_partial:
@@ -781,7 +803,7 @@ class DonchianMultiCoinBot:
             f"💼 Equity: ${equity:,.0f}\n"
             f"🏷 Mode: {mode}"
         )
-        send_telegram(msg)
+        self.send_notification(msg)
 
         # Sync to Supabase
         self.sync.sync_position_update(symbol, pos)
@@ -909,7 +931,7 @@ class DonchianMultiCoinBot:
             f"💼 Equity: ${equity:,.0f}\n"
             f"🏷 Mode: {mode} | Futures"
         )
-        send_telegram(msg)
+        self.send_notification(msg)
 
         # Sync to Supabase
         self.sync.sync_position_open(perp_id, self.positions[perp_id])
@@ -980,7 +1002,7 @@ class DonchianMultiCoinBot:
             f"💼 Equity: ${equity:,.0f}\n"
             f"🏷 Mode: {mode} | Futures"
         )
-        send_telegram(msg)
+        self.send_notification(msg)
 
         # Sync to Supabase
         if is_partial:
@@ -1080,7 +1102,7 @@ class DonchianMultiCoinBot:
             f"💼 Equity: ${equity:,.0f}\n"
             f"🏷 Mode: {mode} | Futures Long"
         )
-        send_telegram(msg)
+        self.send_notification(msg)
 
         # Sync to Supabase
         self.sync.sync_position_open(perp_id, self.positions[perp_id])
@@ -1152,7 +1174,7 @@ class DonchianMultiCoinBot:
             f"💼 Equity: ${equity:,.0f}\n"
             f"🏷 Mode: {mode} | Futures Long"
         )
-        send_telegram(msg)
+        self.send_notification(msg)
 
         # Sync to Supabase
         if is_partial:
@@ -1238,7 +1260,7 @@ class DonchianMultiCoinBot:
             f"💼 Equity: ${equity:,.0f}\n"
             f"🏷 Mode: {mode} | Futures Long"
         )
-        send_telegram(msg)
+        self.send_notification(msg)
 
         # Sync to Supabase
         self.sync.sync_position_update(symbol, pos)
@@ -1943,7 +1965,7 @@ class DonchianMultiCoinBot:
             f"🏷 Mode: {'PAPER' if self.paper_trading else 'LIVE'}\n"
             f"🕐 {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}"
         )
-        send_telegram(msg)
+        self.send_notification(msg)
 
         # Sync equity snapshot to Supabase
         positions_value = equity - self.cash
@@ -2027,7 +2049,7 @@ class DonchianMultiCoinBot:
             f"🏷 Mode: {'PAPER' if self.paper_trading else 'LIVE'}\n"
             f"🕐 {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}"
         )
-        send_telegram(msg)
+        self.send_notification(msg)
 
         # Sync startup to Supabase
         self.sync.sync_event("startup",

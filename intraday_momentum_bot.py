@@ -36,7 +36,7 @@ import numpy as np
 import pandas as pd
 from datetime import datetime, timezone, timedelta
 from coinbase_futures import CoinbaseFuturesClient, SPOT_TO_PERP, PERP_TO_SPOT
-from notify import send_telegram, setup_logging
+from notify import send_telegram, send_telegram_user, setup_logging
 from supabase_sync import SupabaseSync
 
 # ============================================================================
@@ -123,8 +123,38 @@ class IntradayMomentumBot:
         # Supabase sync
         self.sync = SupabaseSync()
 
+        # Per-user Telegram (loaded from Supabase, falls back to .env)
+        self.telegram_bot_token = ""
+        self.telegram_chat_id = ""
+        self.notify_telegram = True
+        self._load_telegram_config()
+
         # Load saved state
         self.load_state()
+
+    # ------------------------------------------------------------------
+    # NOTIFICATIONS
+    # ------------------------------------------------------------------
+
+    def _load_telegram_config(self):
+        """Load per-user Telegram credentials from Supabase."""
+        try:
+            config = self.sync.load_config()
+            if config:
+                self.telegram_bot_token = config.get("telegram_bot_token", "")
+                self.telegram_chat_id = config.get("telegram_chat_id", "")
+                self.notify_telegram = config.get("notify_telegram", True)
+        except Exception:
+            pass
+
+    def send_notification(self, message):
+        """Send Telegram using per-user creds if configured, else fall back to .env."""
+        if not self.notify_telegram:
+            return
+        if self.telegram_bot_token and self.telegram_chat_id:
+            send_telegram_user(message, self.telegram_bot_token, self.telegram_chat_id)
+        else:
+            send_telegram(message)
 
     # ------------------------------------------------------------------
     # STATE PERSISTENCE
@@ -511,7 +541,7 @@ class IntradayMomentumBot:
             f"📊 {signal['reason']}\n"
             f"🕐 {datetime.now(timezone.utc).strftime('%H:%M UTC')}"
         )
-        send_telegram(msg)
+        self.send_notification(msg)
         self.logger.info(f"INTRADAY {side_tag} {symbol}: entry=${entry:.4f}, stop=${stop:.4f}, size=${position_size:.0f}")
 
         # Sync to Supabase
@@ -558,7 +588,7 @@ class IntradayMomentumBot:
             f"📋 {reason}\n"
             f"🕐 {datetime.now(timezone.utc).strftime('%H:%M UTC')}"
         )
-        send_telegram(msg)
+        self.send_notification(msg)
         self.logger.info(f"INTRADAY CLOSE {symbol} [{side_tag}]: PnL ${net_pnl_dollar:+.0f} ({net_pnl_pct*100:+.2f}%), {reason}")
 
         # Log trade
@@ -639,7 +669,7 @@ class IntradayMomentumBot:
         if self.day_pnl / STARTING_CAPITAL < -(MAX_DAILY_LOSS_PCT / 100):
             self.day_locked = True
             print(f"  DAILY LOSS LIMIT HIT: ${self.day_pnl:+,.0f} ({self.day_pnl/STARTING_CAPITAL*100:+.1f}%)")
-            send_telegram(f"🚨 <b>INTRADAY DAILY LOSS LIMIT</b>\nP&L: ${self.day_pnl:+,.0f}\nTrading paused until tomorrow.")
+            self.send_notification(f"🚨 <b>INTRADAY DAILY LOSS LIMIT</b>\nP&L: ${self.day_pnl:+,.0f}\nTrading paused until tomorrow.")
             return
 
         # Step 2: Check for new entries (only if regime is trending)
@@ -804,7 +834,7 @@ class IntradayMomentumBot:
             f"🏷 Mode: {'PAPER' if self.paper_trading else 'LIVE'} | Strategy: MTF Momentum\n"
             f"🕐 {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}"
         )
-        send_telegram(msg)
+        self.send_notification(msg)
 
     # ------------------------------------------------------------------
     # MAIN LOOP
@@ -848,7 +878,7 @@ class IntradayMomentumBot:
             f"🏷 Mode: {'PAPER' if self.paper_trading else 'LIVE'}\n"
             f"🕐 {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}"
         )
-        send_telegram(msg)
+        self.send_notification(msg)
 
         last_hourly_check = None
         last_summary = None
@@ -895,7 +925,7 @@ class IntradayMomentumBot:
                 f"📊 Trades: {len(self.trades_log)}\n"
                 f"📈 Positions: {len(self.positions)}"
             )
-            send_telegram(msg)
+            self.send_notification(msg)
 
 
 # ============================================================================

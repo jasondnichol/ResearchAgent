@@ -63,6 +63,24 @@ def send_telegram(message):
         return False
 
 
+def send_telegram_user(message, bot_token, chat_id):
+    """Send a Telegram message using per-user credentials."""
+    if not bot_token or not chat_id:
+        return False
+    url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
+    payload = {"chat_id": chat_id, "text": message, "parse_mode": "HTML"}
+    try:
+        response = requests.post(url, json=payload, timeout=10)
+        if response.status_code == 200:
+            return True
+        else:
+            print(f"⚠️  Telegram error: {response.status_code} - {response.text}")
+            return False
+    except Exception as e:
+        print(f"⚠️  Telegram send failed: {e}")
+        return False
+
+
 def notify_buy(price, strategy, regime, mode="PAPER"):
     """Send BUY notification"""
     msg = (
