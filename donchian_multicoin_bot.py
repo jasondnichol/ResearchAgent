@@ -1552,45 +1552,6 @@ class DonchianMultiCoinBot:
         print(f"Bear filter: {bear_status}")
         self.logger.info(f"Bull filter: {bull_status} | Bear filter: {bear_status}")
 
-        # ===== LONG PYRAMIDING (gated by bull filter, spot longs only) =====
-        if PYRAMID_ENABLED and is_bull and self.positions:
-            print(f"\nChecking long pyramid opportunities...")
-            for symbol in list(self.positions.keys()):
-                pos = self.positions[symbol]
-                if pos.get('side') in ('SHORT', 'FUTURES_LONG') or pos.get('pyramided'):
-                    continue
-
-                try:
-                    strategy = self.strategies.get(symbol)
-                    if not strategy:
-                        continue
-                    df = strategy.fetch_daily_candles(symbol, limit=STRATEGY_PARAMS['lookback'])
-                    df = strategy.calculate_indicators(df)
-                    if len(df) < 25:
-                        continue
-
-                    current = df.iloc[-1]
-                    prev = df.iloc[-2]
-                    current_close = float(current['close'])
-                    gain_pct = ((current_close - pos['entry_price']) / pos['entry_price']) * 100
-
-                    new_high = (pd.notna(prev['donchian_high'])
-                                and current_close > float(prev['donchian_high']))
-
-                    if gain_pct >= PYRAMID_GAIN_PCT and new_high:
-                        atr = float(current['atr'])
-                        self.execute_pyramid(symbol, current_close, atr, gain_pct, prices)
-                    else:
-                        if gain_pct >= PYRAMID_GAIN_PCT:
-                            print(f"  {symbol}: +{gain_pct:.1f}% but no new 20d high")
-                        else:
-                            print(f"  {symbol}: +{gain_pct:.1f}% (need +{PYRAMID_GAIN_PCT}%)")
-
-                    time.sleep(0.3)
-
-                except Exception as e:
-                    self.logger.error(f"Pyramid check failed for {symbol}: {e}")
-
         # ===== FUTURES LONG PYRAMIDING (gated by bull filter) =====
         if FUTURES_LONG_PYRAMID_ENABLED and self.futures_long_enabled and is_bull and self.positions:
             print(f"\nChecking futures long pyramid opportunities...")
@@ -1631,36 +1592,46 @@ class DonchianMultiCoinBot:
                 except Exception as e:
                     self.logger.error(f"Futures long pyramid check failed for {symbol}: {e}")
 
-        # ===== LONG ENTRIES (gated by bull filter) =====
-        print(f"\nChecking long entries...")
-        if not is_bull:
-            print(f"  LONG ENTRIES BLOCKED — bull filter is {bull_status}")
-            self.logger.info(f"Long entries blocked: {bull_status}")
-        else:
-            for symbol in COIN_UNIVERSE:
-                if symbol in self.positions or SPOT_TO_PERP.get(symbol, '') in self.positions:
+        # ===== LONG PYRAMIDING (gated by bull filter, spot longs only) =====
+        if PYRAMID_ENABLED and is_bull and self.positions:
+            print(f"\nChecking long pyramid opportunities...")
+            for symbol in list(self.positions.keys()):
+                pos = self.positions[symbol]
+                if pos.get('side') in ('SHORT', 'FUTURES_LONG') or pos.get('pyramided'):
                     continue
-                if len(self.positions) >= MAX_POSITIONS:
-                    print(f"  Max positions reached, skipping remaining")
-                    break
 
                 try:
-                    strategy = self.strategies[symbol]
-                    signal = strategy.generate_signal(symbol)
+                    strategy = self.strategies.get(symbol)
+                    if not strategy:
+                        continue
+                    df = strategy.fetch_daily_candles(symbol, limit=STRATEGY_PARAMS['lookback'])
+                    df = strategy.calculate_indicators(df)
+                    if len(df) < 25:
+                        continue
 
-                    if signal['signal'] == 'BUY':
-                        atr = signal.get('atr', 0)
-                        self.execute_buy(symbol, signal['price'], atr, signal['reason'], prices)
+                    current = df.iloc[-1]
+                    prev = df.iloc[-2]
+                    current_close = float(current['close'])
+                    gain_pct = ((current_close - pos['entry_price']) / pos['entry_price']) * 100
+
+                    new_high = (pd.notna(prev['donchian_high'])
+                                and current_close > float(prev['donchian_high']))
+
+                    if gain_pct >= PYRAMID_GAIN_PCT and new_high:
+                        atr = float(current['atr'])
+                        self.execute_pyramid(symbol, current_close, atr, gain_pct, prices)
                     else:
-                        print(f"  {symbol}: {signal['signal']} — {signal['reason']}")
+                        if gain_pct >= PYRAMID_GAIN_PCT:
+                            print(f"  {symbol}: +{gain_pct:.1f}% but no new 20d high")
+                        else:
+                            print(f"  {symbol}: +{gain_pct:.1f}% (need +{PYRAMID_GAIN_PCT}%)")
 
                     time.sleep(0.3)
 
                 except Exception as e:
-                    self.logger.error(f"Long entry check failed for {symbol}: {e}")
-                    print(f"  {symbol}: ERROR — {e}")
+                    self.logger.error(f"Pyramid check failed for {symbol}: {e}")
 
-        # ===== FUTURES LONG ENTRIES (gated by bull filter + enabled) =====
+        # ===== FUTURES LONG ENTRIES (gated by bull filter + enabled, checked FIRST for lower fees) =====
         print(f"\nChecking futures long entries...")
         if not self.futures_long_enabled:
             print(f"  FUTURES LONG DISABLED — skipping")
@@ -1692,6 +1663,35 @@ class DonchianMultiCoinBot:
                 except Exception as e:
                     self.logger.error(f"Futures long entry check failed for {symbol}: {e}")
                     print(f"  {symbol} FL: ERROR — {e}")
+
+        # ===== SPOT LONG ENTRIES (gated by bull filter, fallback for coins without perps) =====
+        print(f"\nChecking spot long entries...")
+        if not is_bull:
+            print(f"  LONG ENTRIES BLOCKED — bull filter is {bull_status}")
+            self.logger.info(f"Long entries blocked: {bull_status}")
+        else:
+            for symbol in COIN_UNIVERSE:
+                if symbol in self.positions or SPOT_TO_PERP.get(symbol, '') in self.positions:
+                    continue
+                if len(self.positions) >= MAX_POSITIONS:
+                    print(f"  Max positions reached, skipping remaining")
+                    break
+
+                try:
+                    strategy = self.strategies[symbol]
+                    signal = strategy.generate_signal(symbol)
+
+                    if signal['signal'] == 'BUY':
+                        atr = signal.get('atr', 0)
+                        self.execute_buy(symbol, signal['price'], atr, signal['reason'], prices)
+                    else:
+                        print(f"  {symbol}: {signal['signal']} — {signal['reason']}")
+
+                    time.sleep(0.3)
+
+                except Exception as e:
+                    self.logger.error(f"Long entry check failed for {symbol}: {e}")
+                    print(f"  {symbol}: ERROR — {e}")
 
         # ===== SHORT ENTRIES (gated by short_enabled + bear filter / death cross) =====
         print(f"\nChecking short entries...")
