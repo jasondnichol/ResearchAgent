@@ -31,3 +31,8 @@ logs/
 
 # Misc
 Stuff/
+cache_1h/
+cache_15m/
+cache_hourly/
+cache_markets/
+intraday_state.json
