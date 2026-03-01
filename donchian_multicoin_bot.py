@@ -194,6 +194,8 @@ class DonchianMultiCoinBot:
         self.bull_filter_enabled = BULL_FILTER_ENABLED
         # Bear filter (death cross) — gates short entries
         self.bear_filter_enabled = BEAR_FILTER_ENABLED
+        # Short master toggle — can disable shorts independently of bear filter
+        self.short_enabled = True
         # Futures Long — default from constant, overridden by Supabase config
         self.futures_long_enabled = FUTURES_LONG_ENABLED
         self.futures_long_leverage = FUTURES_LONG_LEVERAGE
@@ -207,24 +209,128 @@ class DonchianMultiCoinBot:
     # ------------------------------------------------------------------
 
     def load_remote_config(self):
-        """Load config from Supabase. Updates bull_filter, bear_filter, futures_long settings.
-        Falls back to local constants if Supabase is unavailable."""
+        """Load full strategy config from Supabase. Updates all strategy params,
+        risk settings, coin lists, and mode toggles. Falls back to local defaults
+        if Supabase is unavailable."""
+        global MAX_POSITIONS, RISK_PER_TRADE_PCT, EMERGENCY_STOP_PCT
+        global PYRAMID_ENABLED, PYRAMID_GAIN_PCT, PYRAMID_RISK_PCT
+        global SHORT_RISK_PER_TRADE_PCT, SHORT_EMERGENCY_STOP_PCT, SHORT_MAX_HOLD_DAYS
+        global SHORT_PYRAMID_ENABLED
+        global FUTURES_LONG_RISK_PER_TRADE_PCT, FUTURES_LONG_EMERGENCY_STOP_PCT
+        global FUTURES_LONG_PYRAMID_ENABLED, FUTURES_LONG_PYRAMID_GAIN_PCT, FUTURES_LONG_PYRAMID_RISK_PCT
+
         try:
             config = self.sync.load_config()
-            if config:
-                self.bull_filter_enabled = config.get("bull_filter_enabled", BULL_FILTER_ENABLED)
-                self.bear_filter_enabled = config.get("bear_filter_enabled", BEAR_FILTER_ENABLED)
-                self.futures_long_enabled = config.get("futures_long_enabled", FUTURES_LONG_ENABLED)
-                self.futures_long_leverage = config.get("futures_long_leverage", FUTURES_LONG_LEVERAGE)
-                # Clamp leverage to 1-3x safety range
-                self.futures_long_leverage = max(1.0, min(3.0, float(self.futures_long_leverage)))
-                self.logger.info(
-                    f"[CONFIG] Loaded from Supabase — bull_filter: {'ON' if self.bull_filter_enabled else 'OFF'}, "
-                    f"bear_filter: {'ON' if self.bear_filter_enabled else 'OFF'}, "
-                    f"futures_long: {'ON' if self.futures_long_enabled else 'OFF'} ({self.futures_long_leverage}x leverage)"
-                )
-            else:
+            if not config:
                 self.logger.info("[CONFIG] No remote config found, using local defaults")
+                return
+
+            # Helper: get value from config, return None if missing
+            def _v(key):
+                v = config.get(key)
+                return v if v is not None else None
+
+            # ── Mode toggles ──
+            self.bull_filter_enabled = config.get("bull_filter_enabled", BULL_FILTER_ENABLED)
+            self.bear_filter_enabled = config.get("bear_filter_enabled", BEAR_FILTER_ENABLED)
+            self.short_enabled = config.get("short_enabled", True)
+            self.futures_long_enabled = config.get("futures_long_enabled", FUTURES_LONG_ENABLED)
+            self.futures_long_leverage = max(1.0, min(3.0, float(
+                config.get("futures_long_leverage", FUTURES_LONG_LEVERAGE))))
+
+            # ── Spot Long strategy params (update dict in place) ──
+            spot_updates = {}
+            if _v('donchian_period') is not None: spot_updates['donchian_period'] = int(_v('donchian_period'))
+            if _v('exit_period') is not None: spot_updates['exit_period'] = int(_v('exit_period'))
+            if _v('atr_mult') is not None: spot_updates['atr_mult'] = float(_v('atr_mult'))
+            if _v('volume_mult') is not None: spot_updates['volume_mult'] = float(_v('volume_mult'))
+            if _v('ema_period') is not None: spot_updates['ema_period'] = int(_v('ema_period'))
+            if _v('tp1_gain_pct') is not None: spot_updates['tp1_pct'] = float(_v('tp1_gain_pct'))
+            if _v('tp2_gain_pct') is not None: spot_updates['tp2_pct'] = float(_v('tp2_gain_pct'))
+            if _v('tp1_size_pct') is not None: spot_updates['tp1_fraction'] = float(_v('tp1_size_pct')) / 100.0
+            if _v('tp2_size_pct') is not None: spot_updates['tp2_fraction'] = float(_v('tp2_size_pct')) / 100.0
+            if spot_updates:
+                STRATEGY_PARAMS.update(spot_updates)
+
+            # ── Spot Long scalars ──
+            if _v('risk_per_trade_pct') is not None: RISK_PER_TRADE_PCT = float(_v('risk_per_trade_pct'))
+            if _v('max_positions') is not None: MAX_POSITIONS = int(_v('max_positions'))
+            if _v('emergency_stop_pct') is not None: EMERGENCY_STOP_PCT = float(_v('emergency_stop_pct'))
+            if _v('pyramid_enabled') is not None: PYRAMID_ENABLED = bool(_v('pyramid_enabled'))
+            if _v('pyramid_gain_pct') is not None: PYRAMID_GAIN_PCT = float(_v('pyramid_gain_pct'))
+            if _v('pyramid_risk_pct') is not None: PYRAMID_RISK_PCT = float(_v('pyramid_risk_pct'))
+
+            # ── Spot Long coin list ──
+            coins = _v('coins')
+            if coins and isinstance(coins, list) and len(coins) > 0:
+                COIN_UNIVERSE.clear()
+                COIN_UNIVERSE.extend(coins)
+
+            # ── Short strategy params ──
+            short_updates = {}
+            if _v('short_entry_period') is not None: short_updates['donchian_period'] = int(_v('short_entry_period'))
+            if _v('short_exit_period') is not None: short_updates['exit_period'] = int(_v('short_exit_period'))
+            if _v('short_atr_mult') is not None: short_updates['atr_mult'] = float(_v('short_atr_mult'))
+            if _v('short_volume_mult') is not None: short_updates['volume_mult'] = float(_v('short_volume_mult'))
+            if _v('short_tp1_gain_pct') is not None: short_updates['tp1_pct'] = float(_v('short_tp1_gain_pct'))
+            if _v('short_tp2_gain_pct') is not None: short_updates['tp2_pct'] = float(_v('short_tp2_gain_pct'))
+            if _v('short_tp1_size_pct') is not None: short_updates['tp1_fraction'] = float(_v('short_tp1_size_pct')) / 100.0
+            if _v('short_tp2_size_pct') is not None: short_updates['tp2_fraction'] = float(_v('short_tp2_size_pct')) / 100.0
+            if short_updates:
+                SHORT_STRATEGY_PARAMS.update(short_updates)
+
+            # ── Short scalars ──
+            if _v('short_risk_per_trade_pct') is not None: SHORT_RISK_PER_TRADE_PCT = float(_v('short_risk_per_trade_pct'))
+            if _v('short_emergency_stop_pct') is not None: SHORT_EMERGENCY_STOP_PCT = float(_v('short_emergency_stop_pct'))
+            if _v('short_max_hold_days') is not None: SHORT_MAX_HOLD_DAYS = int(_v('short_max_hold_days'))
+
+            # ── Short coin list ──
+            short_coins = _v('short_coins')
+            if short_coins and isinstance(short_coins, list) and len(short_coins) > 0:
+                SHORT_COIN_UNIVERSE.clear()
+                SHORT_COIN_UNIVERSE.extend(short_coins)
+
+            # ── Futures Long strategy params ──
+            fl_updates = {}
+            if _v('futures_long_entry_period') is not None: fl_updates['donchian_period'] = int(_v('futures_long_entry_period'))
+            if _v('futures_long_exit_period') is not None: fl_updates['exit_period'] = int(_v('futures_long_exit_period'))
+            if _v('futures_long_atr_mult') is not None: fl_updates['atr_mult'] = float(_v('futures_long_atr_mult'))
+            if _v('futures_long_volume_mult') is not None: fl_updates['volume_mult'] = float(_v('futures_long_volume_mult'))
+            if _v('futures_long_tp1_gain_pct') is not None: fl_updates['tp1_pct'] = float(_v('futures_long_tp1_gain_pct'))
+            if _v('futures_long_tp2_gain_pct') is not None: fl_updates['tp2_pct'] = float(_v('futures_long_tp2_gain_pct'))
+            if _v('futures_long_tp1_size_pct') is not None: fl_updates['tp1_fraction'] = float(_v('futures_long_tp1_size_pct')) / 100.0
+            if _v('futures_long_tp2_size_pct') is not None: fl_updates['tp2_fraction'] = float(_v('futures_long_tp2_size_pct')) / 100.0
+            if fl_updates:
+                FUTURES_LONG_STRATEGY_PARAMS.update(fl_updates)
+
+            # ── Futures Long scalars ──
+            if _v('futures_long_risk_per_trade_pct') is not None: FUTURES_LONG_RISK_PER_TRADE_PCT = float(_v('futures_long_risk_per_trade_pct'))
+            if _v('futures_long_emergency_stop_pct') is not None: FUTURES_LONG_EMERGENCY_STOP_PCT = float(_v('futures_long_emergency_stop_pct'))
+            if _v('futures_long_pyramid_enabled') is not None: FUTURES_LONG_PYRAMID_ENABLED = bool(_v('futures_long_pyramid_enabled'))
+            if _v('futures_long_pyramid_gain_pct') is not None: FUTURES_LONG_PYRAMID_GAIN_PCT = float(_v('futures_long_pyramid_gain_pct'))
+            if _v('futures_long_pyramid_risk_pct') is not None: FUTURES_LONG_PYRAMID_RISK_PCT = float(_v('futures_long_pyramid_risk_pct'))
+
+            # ── Futures Long coin list ──
+            fl_coins = _v('futures_long_coins')
+            if fl_coins and isinstance(fl_coins, list) and len(fl_coins) > 0:
+                FUTURES_LONG_COIN_UNIVERSE.clear()
+                FUTURES_LONG_COIN_UNIVERSE.extend(fl_coins)
+
+            # ── Recreate strategy instances with updated params ──
+            self.strategies = {sym: DonchianBreakoutStrategy(STRATEGY_PARAMS) for sym in COIN_UNIVERSE}
+            self.short_strategies = {sym: DonchianBreakoutStrategy(SHORT_STRATEGY_PARAMS) for sym in SHORT_COIN_UNIVERSE}
+            self.futures_long_strategies = {sym: DonchianBreakoutStrategy(FUTURES_LONG_STRATEGY_PARAMS) for sym in FUTURES_LONG_COIN_UNIVERSE}
+
+            self.logger.info(
+                f"[CONFIG] Loaded from Supabase — "
+                f"bull: {'ON' if self.bull_filter_enabled else 'OFF'}, "
+                f"short: {'ON' if self.short_enabled else 'OFF'} (bear: {'ON' if self.bear_filter_enabled else 'OFF'}), "
+                f"FL: {'ON' if self.futures_long_enabled else 'OFF'} ({self.futures_long_leverage}x), "
+                f"max_pos: {MAX_POSITIONS}, risk: {RISK_PER_TRADE_PCT}%, "
+                f"ATR: {STRATEGY_PARAMS['atr_mult']}x/{SHORT_STRATEGY_PARAMS['atr_mult']}x/{FUTURES_LONG_STRATEGY_PARAMS['atr_mult']}x, "
+                f"coins: {len(COIN_UNIVERSE)}L/{len(FUTURES_LONG_COIN_UNIVERSE)}FL/{len(SHORT_COIN_UNIVERSE)}S"
+            )
+
         except Exception as e:
             self.logger.warning(f"[CONFIG] Failed to load remote config: {e}")
 
@@ -1152,7 +1258,7 @@ class DonchianMultiCoinBot:
 
     def daily_check(self):
         """Full daily signal check — long and short entries/exits"""
-        # Reload config from dashboard (picks up bull filter toggle, etc.)
+        # Reload full config from Supabase (strategy params, risk, coins, toggles)
         self.load_remote_config()
 
         now = datetime.now(timezone.utc)
@@ -1565,9 +1671,12 @@ class DonchianMultiCoinBot:
                     self.logger.error(f"Futures long entry check failed for {symbol}: {e}")
                     print(f"  {symbol} FL: ERROR — {e}")
 
-        # ===== SHORT ENTRIES (gated by bear filter / death cross) =====
+        # ===== SHORT ENTRIES (gated by short_enabled + bear filter / death cross) =====
         print(f"\nChecking short entries...")
-        if not is_bear:
+        if not self.short_enabled:
+            print(f"  SHORT ENTRIES BLOCKED — shorts disabled via dashboard")
+            self.logger.info(f"Short entries blocked: disabled via dashboard")
+        elif not is_bear:
             print(f"  SHORT ENTRIES BLOCKED — bear filter is {bear_status}")
             self.logger.info(f"Short entries blocked: {bear_status}")
         else:
@@ -1865,7 +1974,8 @@ class DonchianMultiCoinBot:
         print(f"Short trailing: {SHORT_STRATEGY_PARAMS['atr_mult']}x ATR")
         print(f"Pyramiding: {'ON (+' + str(PYRAMID_GAIN_PCT) + '% / ' + str(PYRAMID_RISK_PCT) + '% risk)' if PYRAMID_ENABLED else 'OFF'}")
         print(f"Bull filter: {'ON' if self.bull_filter_enabled else 'OFF'}")
-        print(f"Bear filter: {'ON' if self.bear_filter_enabled else 'OFF'}")
+        print(f"Shorts: {'ON' if self.short_enabled else 'OFF'} (bear filter: {'ON' if self.bear_filter_enabled else 'OFF'})")
+        print(f"Config: loaded from Supabase (reloads each daily check)")
         print(f"Daily check: {DAILY_CHECK_HOUR:02d}:{DAILY_CHECK_MINUTE:02d} UTC")
         print(f"Stop check: every {STOP_CHECK_INTERVAL // 60} min")
         print("=" * 80)
@@ -1898,6 +2008,7 @@ class DonchianMultiCoinBot:
                          f"(SMA50 ${bear_details.get('sma_50', 0):,.0f} vs SMA200 ${bear_details.get('sma_200', 0):,.0f})\n")
         pyramid_line = f"📈 Pyramiding: +{PYRAMID_GAIN_PCT}% / {PYRAMID_RISK_PCT}% risk\n" if PYRAMID_ENABLED else ""
         fl_line = f"🔵 Futures Long: <b>{'ON' if self.futures_long_enabled else 'OFF'}</b> ({self.futures_long_leverage}x leverage)\n"
+        short_line = f"🟣 Shorts: <b>{'ON' if self.short_enabled else 'OFF'}</b>\n"
         msg = (
             f"🚀 <b>DONCHIAN BOT STARTED (TRI-MODE)</b>\n"
             f"━━━━━━━━━━━━━━━\n"
@@ -1910,6 +2021,7 @@ class DonchianMultiCoinBot:
             f"📈 Positions: {len(self.positions)}/{MAX_POSITIONS} (L:{long_count} FL:{fl_count} S:{short_count})\n"
             f"{pyramid_line}"
             f"{fl_line}"
+            f"{short_line}"
             f"{bull_line}"
             f"{bear_line}"
             f"🏷 Mode: {'PAPER' if self.paper_trading else 'LIVE'}\n"
@@ -1927,6 +2039,7 @@ class DonchianMultiCoinBot:
                               "max_positions": MAX_POSITIONS,
                               "futures_long_enabled": self.futures_long_enabled,
                               "futures_long_leverage": self.futures_long_leverage,
+                              "short_enabled": self.short_enabled,
                               "bull_filter": bull_status, "bear_filter": bear_status,
                               "equity": equity})
         self.sync.sync_equity_snapshot(
