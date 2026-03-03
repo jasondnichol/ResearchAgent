@@ -1,0 +1,1253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TradeSavvy Trading System — Strategy Guide</title>
+    <style>
+        :root {
+            --bg: #0f1117;
+            --surface: #1a1d27;
+            --surface2: #222633;
+            --border: #2d3348;
+            --text: #e4e6ed;
+            --text-muted: #8b8fa3;
+            --green: #22c55e;
+            --green-dim: rgba(34,197,94,0.12);
+            --red: #ef4444;
+            --red-dim: rgba(239,68,68,0.12);
+            --blue: #3b82f6;
+            --blue-dim: rgba(59,130,246,0.12);
+            --purple: #a855f7;
+            --purple-dim: rgba(168,85,247,0.12);
+            --yellow: #eab308;
+            --yellow-dim: rgba(234,179,8,0.12);
+            --cyan: #06b6d4;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.7;
+            padding: 0;
+        }
+
+        /* Hero */
+        .hero {
+            background: linear-gradient(135deg, #0f1117 0%, #1a2332 50%, #0f1117 100%);
+            border-bottom: 1px solid var(--border);
+            padding: 60px 40px;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+        }
+        .hero::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle at 30% 50%, rgba(34,197,94,0.06) 0%, transparent 50%),
+                        radial-gradient(circle at 70% 50%, rgba(59,130,246,0.06) 0%, transparent 50%);
+            animation: pulse 8s ease-in-out infinite alternate;
+        }
+        @keyframes pulse {
+            0% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+        .hero h1 {
+            font-size: 2.8em;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            position: relative;
+            background: linear-gradient(135deg, #fff, #94a3b8);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .hero .subtitle {
+            font-size: 1.15em;
+            color: var(--text-muted);
+            margin-top: 12px;
+            position: relative;
+        }
+        .hero .meta {
+            display: flex;
+            justify-content: center;
+            gap: 30px;
+            margin-top: 24px;
+            position: relative;
+        }
+        .hero .meta span {
+            font-size: 0.85em;
+            color: var(--text-muted);
+            background: var(--surface);
+            padding: 6px 16px;
+            border-radius: 20px;
+            border: 1px solid var(--border);
+        }
+
+        /* Layout */
+        .container {
+            max-width: 1100px;
+            margin: 0 auto;
+            padding: 40px 30px;
+        }
+
+        /* Section */
+        section {
+            margin-bottom: 50px;
+        }
+        section h2 {
+            font-size: 1.7em;
+            font-weight: 700;
+            margin-bottom: 24px;
+            padding-bottom: 12px;
+            border-bottom: 2px solid var(--border);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        section h2 .icon {
+            font-size: 0.85em;
+        }
+        section h3 {
+            font-size: 1.2em;
+            font-weight: 600;
+            margin: 24px 0 12px;
+            color: #cbd5e1;
+        }
+        p { margin-bottom: 14px; color: var(--text); }
+
+        /* KPI Cards */
+        .kpi-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            margin: 24px 0;
+        }
+        .kpi {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 20px;
+            text-align: center;
+        }
+        .kpi .value {
+            font-size: 2em;
+            font-weight: 700;
+            line-height: 1.2;
+        }
+        .kpi .label {
+            font-size: 0.8em;
+            color: var(--text-muted);
+            margin-top: 6px;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+        }
+        .kpi.green .value { color: var(--green); }
+        .kpi.blue .value { color: var(--blue); }
+        .kpi.purple .value { color: var(--purple); }
+        .kpi.yellow .value { color: var(--yellow); }
+
+        /* Mode Cards */
+        .mode-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin: 24px 0;
+        }
+        .mode-card {
+            background: var(--surface);
+            border-radius: 12px;
+            padding: 24px;
+            border-left: 4px solid;
+            position: relative;
+        }
+        .mode-card.futures-long { border-color: var(--blue); }
+        .mode-card.spot-long { border-color: var(--green); }
+        .mode-card.futures-short { border-color: var(--purple); }
+        .mode-card h4 {
+            font-size: 1.1em;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .mode-card .badge {
+            font-size: 0.65em;
+            padding: 3px 10px;
+            border-radius: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        .badge-primary { background: var(--blue-dim); color: var(--blue); }
+        .badge-fallback { background: var(--green-dim); color: var(--green); }
+        .badge-bear { background: var(--purple-dim); color: var(--purple); }
+        .mode-card .detail-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 6px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.04);
+            font-size: 0.9em;
+        }
+        .mode-card .detail-row .lbl { color: var(--text-muted); }
+
+        /* Tables */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 16px 0;
+            font-size: 0.9em;
+        }
+        thead th {
+            background: var(--surface2);
+            padding: 12px 16px;
+            text-align: left;
+            font-weight: 600;
+            color: #cbd5e1;
+            border-bottom: 2px solid var(--border);
+        }
+        tbody td {
+            padding: 10px 16px;
+            border-bottom: 1px solid rgba(255,255,255,0.04);
+        }
+        tbody tr:hover { background: rgba(255,255,255,0.02); }
+
+        /* Workflow Diagram */
+        .workflow {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 30px;
+            margin: 24px 0;
+            overflow-x: auto;
+        }
+        .workflow h4 {
+            text-align: center;
+            margin-bottom: 20px;
+            color: #cbd5e1;
+            font-size: 1em;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+        }
+
+        /* Flowchart */
+        .flow {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0;
+        }
+        .flow-step {
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 14px 28px;
+            text-align: center;
+            min-width: 280px;
+            position: relative;
+            font-size: 0.9em;
+        }
+        .flow-step.highlight-green { border-color: var(--green); background: var(--green-dim); }
+        .flow-step.highlight-blue { border-color: var(--blue); background: var(--blue-dim); }
+        .flow-step.highlight-purple { border-color: var(--purple); background: var(--purple-dim); }
+        .flow-step.highlight-yellow { border-color: var(--yellow); background: var(--yellow-dim); }
+        .flow-step.highlight-red { border-color: var(--red); background: var(--red-dim); }
+        .flow-step strong { display: block; margin-bottom: 2px; }
+        .flow-step .step-num {
+            position: absolute;
+            top: -10px;
+            left: -10px;
+            background: var(--blue);
+            color: #fff;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            font-size: 0.75em;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .flow-arrow {
+            width: 2px;
+            height: 24px;
+            background: var(--border);
+            position: relative;
+        }
+        .flow-arrow::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: -4px;
+            border-left: 5px solid transparent;
+            border-right: 5px solid transparent;
+            border-top: 6px solid var(--border);
+        }
+        .flow-branch {
+            display: flex;
+            gap: 20px;
+            align-items: flex-start;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        .flow-branch .flow-step { min-width: 220px; }
+
+        /* Decision diamond */
+        .flow-decision {
+            background: var(--yellow-dim);
+            border: 2px solid var(--yellow);
+            border-radius: 4px;
+            padding: 12px 24px;
+            text-align: center;
+            transform: rotate(0deg);
+            font-size: 0.85em;
+            font-weight: 600;
+            color: var(--yellow);
+            min-width: 240px;
+        }
+
+        /* Sizing diagram */
+        .sizing-diagram {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 16px;
+            flex-wrap: wrap;
+            margin: 20px 0;
+            font-size: 0.95em;
+        }
+        .sizing-box {
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 16px 20px;
+            text-align: center;
+        }
+        .sizing-box .formula { font-size: 1.1em; font-weight: 600; color: var(--cyan); }
+        .sizing-arrow {
+            font-size: 1.4em;
+            color: var(--text-muted);
+        }
+
+        /* Callout */
+        .callout {
+            border-radius: 10px;
+            padding: 18px 22px;
+            margin: 18px 0;
+            font-size: 0.9em;
+            border: 1px solid;
+        }
+        .callout.green { background: var(--green-dim); border-color: rgba(34,197,94,0.3); }
+        .callout.blue { background: var(--blue-dim); border-color: rgba(59,130,246,0.3); }
+        .callout.yellow { background: var(--yellow-dim); border-color: rgba(234,179,8,0.3); }
+        .callout.red { background: var(--red-dim); border-color: rgba(239,68,68,0.3); }
+        .callout strong { display: block; margin-bottom: 4px; }
+
+        /* Timeline */
+        .timeline {
+            position: relative;
+            padding-left: 30px;
+            margin: 20px 0;
+        }
+        .timeline::before {
+            content: '';
+            position: absolute;
+            left: 8px;
+            top: 0;
+            bottom: 0;
+            width: 2px;
+            background: var(--border);
+        }
+        .timeline-item {
+            position: relative;
+            margin-bottom: 24px;
+            padding-left: 20px;
+        }
+        .timeline-item::before {
+            content: '';
+            position: absolute;
+            left: -26px;
+            top: 6px;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: var(--blue);
+            border: 2px solid var(--bg);
+        }
+        .timeline-item.done::before { background: var(--green); }
+        .timeline-item.failed::before { background: var(--red); }
+        .timeline-item h4 { font-size: 1em; margin-bottom: 4px; }
+        .timeline-item p { font-size: 0.85em; color: var(--text-muted); margin: 0; }
+
+        /* Projection chart */
+        .chart-bars {
+            display: flex;
+            align-items: flex-end;
+            gap: 8px;
+            height: 220px;
+            margin: 24px 0;
+            padding: 0 10px;
+        }
+        .chart-bar-col {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            height: 100%;
+            justify-content: flex-end;
+        }
+        .chart-bar {
+            width: 100%;
+            max-width: 60px;
+            background: linear-gradient(to top, var(--blue), var(--green));
+            border-radius: 4px 4px 0 0;
+            min-height: 4px;
+            position: relative;
+            transition: all 0.3s;
+        }
+        .chart-bar:hover { opacity: 0.8; }
+        .chart-bar .bar-value {
+            position: absolute;
+            top: -22px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 0.7em;
+            font-weight: 600;
+            white-space: nowrap;
+            color: var(--green);
+        }
+        .chart-bar-label {
+            font-size: 0.7em;
+            color: var(--text-muted);
+            margin-top: 6px;
+        }
+
+        /* Coin tags */
+        .coin-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin: 10px 0;
+        }
+        .coin-tag {
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 6px 14px;
+            font-size: 0.85em;
+            font-weight: 600;
+        }
+        .coin-tag.special { border-color: var(--yellow); color: var(--yellow); }
+
+        /* Entry rules checklist */
+        .rules-list {
+            list-style: none;
+            margin: 12px 0;
+        }
+        .rules-list li {
+            padding: 10px 16px;
+            margin-bottom: 6px;
+            background: var(--surface);
+            border-radius: 8px;
+            border-left: 3px solid var(--green);
+            font-size: 0.9em;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .rules-list li.short-rule { border-left-color: var(--purple); }
+        .rules-list .check {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: var(--green-dim);
+            color: var(--green);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.7em;
+            flex-shrink: 0;
+        }
+        .rules-list .check.purple { background: var(--purple-dim); color: var(--purple); }
+
+        /* Exit diagram */
+        .exit-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 14px;
+            margin: 16px 0;
+        }
+        .exit-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 18px;
+        }
+        .exit-card h5 {
+            font-size: 0.9em;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .exit-card .rule {
+            font-family: 'SF Mono', 'Fira Code', monospace;
+            font-size: 0.8em;
+            color: var(--cyan);
+            background: rgba(6,182,212,0.08);
+            padding: 6px 10px;
+            border-radius: 6px;
+            margin-bottom: 6px;
+            display: block;
+        }
+        .exit-card .desc { font-size: 0.8em; color: var(--text-muted); }
+
+        /* TP visual */
+        .tp-visual {
+            display: flex;
+            align-items: center;
+            gap: 0;
+            margin: 20px 0;
+            height: 50px;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        .tp-segment {
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.8em;
+            font-weight: 600;
+            color: #fff;
+        }
+        .tp-segment.tp1 { width: 25%; background: var(--green); }
+        .tp-segment.tp2 { width: 25%; background: var(--blue); }
+        .tp-segment.runner { width: 50%; background: var(--purple); }
+
+        /* Regime indicator */
+        .regime-status {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 0.85em;
+            font-weight: 600;
+        }
+        .regime-status.active { background: var(--green-dim); color: var(--green); }
+        .regime-status.inactive { background: var(--red-dim); color: var(--red); }
+        .regime-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            animation: blink 2s infinite;
+        }
+        .regime-dot.green { background: var(--green); }
+        .regime-dot.red { background: var(--red); }
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
+
+        /* Rejected tests */
+        .rejected-item {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 14px 18px;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+        .rejected-item .x-mark {
+            color: var(--red);
+            font-weight: 700;
+            font-size: 1.2em;
+            flex-shrink: 0;
+        }
+        .rejected-item .test-name { font-weight: 600; }
+        .rejected-item .test-reason { font-size: 0.85em; color: var(--text-muted); }
+
+        /* Footer */
+        .footer {
+            text-align: center;
+            padding: 40px;
+            border-top: 1px solid var(--border);
+            color: var(--text-muted);
+            font-size: 0.85em;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .hero { padding: 40px 20px; }
+            .hero h1 { font-size: 1.8em; }
+            .container { padding: 24px 16px; }
+            .flow-branch { flex-direction: column; align-items: center; }
+            .chart-bars { height: 160px; }
+        }
+    </style>
+</head>
+<body>
+
+<!-- ====== HERO ====== -->
+<div class="hero">
+    <h1>TradeSavvy Trading System</h1>
+    <div class="subtitle">Complete Strategy Guide &mdash; Donchian Channel Breakout</div>
+    <div class="meta">
+        <span>Updated: March 1, 2026</span>
+        <span>Owner: Jason Nichol</span>
+        <span>Status: Paper Trading</span>
+    </div>
+</div>
+
+<div class="container">
+
+<!-- ====== OVERVIEW KPIs ====== -->
+<section>
+    <h2><span class="icon">&#x1F4CA;</span> System Overview</h2>
+    <p>The system runs two independent bots on AWS EC2, both paper trading on Coinbase. All long trading routes through <strong>Coinbase CFM perpetual futures</strong> (0.06% taker fee) as the primary venue, with spot (0.50% fee) as fallback. This all-futures approach is the single biggest return lever &mdash; 8x lower fees roughly double net returns.</p>
+
+    <div class="kpi-row">
+        <div class="kpi green">
+            <div class="value">+385%</div>
+            <div class="label">4-Year Backtest Return</div>
+        </div>
+        <div class="kpi blue">
+            <div class="value">48.4%</div>
+            <div class="label">CAGR</div>
+        </div>
+        <div class="kpi purple">
+            <div class="value">~2.5</div>
+            <div class="label">Profit Factor</div>
+        </div>
+        <div class="kpi yellow">
+            <div class="value">65-79%</div>
+            <div class="label">Win Rate</div>
+        </div>
+    </div>
+</section>
+
+<!-- ====== EVOLUTION TIMELINE ====== -->
+<section>
+    <h2><span class="icon">&#x1F504;</span> The Evolution</h2>
+
+    <div class="timeline">
+        <div class="timeline-item failed">
+            <h4>Phase 1: Hourly Regime-Based Trading</h4>
+            <p>Three regimes (Ranging, Trending, Volatile) with different strategies each. Looked great in backtest (+57%) &mdash; failed in practice (-99%) because Coinbase fees (~0.60% round-trip) were 12x larger than the average hourly gain of ~0.05%.</p>
+        </div>
+        <div class="timeline-item done">
+            <h4>Phase 2: Daily Donchian Breakout</h4>
+            <p>Pivoted to daily timeframe. Average winning trade: +25.8% gain over 21-day hold. The 0.90% round-trip fee is negligible. Wait for confirmed breakouts on strong volume and ride trends.</p>
+        </div>
+        <div class="timeline-item done">
+            <h4>Phase 3: Optimization (Feb&ndash;Mar 2026)</h4>
+            <p>Added pyramiding (+15% trigger), 4x ATR trailing stops, partial profit-taking, futures execution, short-side trading. Optimized risk to 4% per trade. Combined result: +385% over 4 years.</p>
+        </div>
+    </div>
+</section>
+
+<!-- ====== THREE TRADING MODES ====== -->
+<section>
+    <h2><span class="icon">&#x1F3AF;</span> Three Trading Modes</h2>
+
+    <div class="mode-cards">
+        <div class="mode-card futures-long">
+            <h4>&#x1F535; Futures Long <span class="badge badge-primary">Primary</span></h4>
+            <div class="detail-row"><span class="lbl">Priority</span> <strong>1st (checked first)</strong></div>
+            <div class="detail-row"><span class="lbl">Exchange</span> Coinbase CFM Perps</div>
+            <div class="detail-row"><span class="lbl">Fee</span> 0.06% / side</div>
+            <div class="detail-row"><span class="lbl">Risk</span> 4% per trade</div>
+            <div class="detail-row"><span class="lbl">When Active</span> BTC &gt; SMA(200)</div>
+        </div>
+
+        <div class="mode-card spot-long">
+            <h4>&#x1F7E2; Spot Long <span class="badge badge-fallback">Fallback</span></h4>
+            <div class="detail-row"><span class="lbl">Priority</span> <strong>2nd (coins without perps)</strong></div>
+            <div class="detail-row"><span class="lbl">Exchange</span> Coinbase Spot</div>
+            <div class="detail-row"><span class="lbl">Fee</span> 0.50% / side</div>
+            <div class="detail-row"><span class="lbl">Risk</span> 4% per trade</div>
+            <div class="detail-row"><span class="lbl">When Active</span> BTC &gt; SMA(200)</div>
+        </div>
+
+        <div class="mode-card futures-short">
+            <h4>&#x1F7E3; Futures Short <span class="badge badge-bear">Bear Only</span></h4>
+            <div class="detail-row"><span class="lbl">Priority</span> <strong>3rd (bear market)</strong></div>
+            <div class="detail-row"><span class="lbl">Exchange</span> Coinbase CFM Perps</div>
+            <div class="detail-row"><span class="lbl">Fee</span> 0.06% / side</div>
+            <div class="detail-row"><span class="lbl">Risk</span> 2% per trade</div>
+            <div class="detail-row"><span class="lbl">When Active</span> Death cross</div>
+        </div>
+    </div>
+</section>
+
+<!-- ====== DAILY WORKFLOW ====== -->
+<section>
+    <h2><span class="icon">&#x1F550;</span> Daily Workflow (00:15 UTC)</h2>
+
+    <div class="workflow">
+        <h4>Daily Check Execution Order</h4>
+        <div class="flow">
+            <div class="flow-step highlight-red">
+                <span class="step-num">1</span>
+                <strong>Process Exits</strong>
+                Long exits &rarr; Futures long exits &rarr; Short exits<br>
+                <em style="font-size:0.85em;color:var(--text-muted)">Free up position slots first</em>
+            </div>
+            <div class="flow-arrow"></div>
+
+            <div class="flow-step highlight-yellow">
+                <span class="step-num">2</span>
+                <strong>Compute Regime Filters</strong>
+                Bull filter: BTC &gt; SMA(200)? &nbsp;|&nbsp; Bear filter: Death cross?
+            </div>
+            <div class="flow-arrow"></div>
+
+            <div class="flow-step highlight-blue">
+                <span class="step-num">3</span>
+                <strong>Pyramiding (Add to Winners)</strong>
+                Futures long pyramiding first &rarr; Spot long pyramiding
+            </div>
+            <div class="flow-arrow"></div>
+
+            <div class="flow-step highlight-green">
+                <span class="step-num">4</span>
+                <strong>New Entries</strong>
+            </div>
+            <div class="flow-arrow"></div>
+
+            <div class="flow-branch">
+                <div class="flow-step highlight-blue">
+                    <strong>Futures Long Entries</strong>
+                    Checked first &mdash; claims slots<br>at 0.06% fees
+                </div>
+                <div class="flow-step highlight-green">
+                    <strong>Spot Long Entries</strong>
+                    Fallback only &mdash; coins<br>without perps (NEAR)
+                </div>
+                <div class="flow-step highlight-purple">
+                    <strong>Short Entries</strong>
+                    Last &mdash; only during<br>confirmed bear market
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="callout blue">
+        <strong>Trailing Stop Checks &mdash; Every 30 Minutes</strong>
+        Independently of the daily signal check, the bot fetches current prices every 30 minutes and checks all trailing stops, partial TPs, and emergency stops for all 3 modes.
+    </div>
+</section>
+
+<!-- ====== ENTRY RULES ====== -->
+<section>
+    <h2><span class="icon">&#x2705;</span> Entry Rules</h2>
+
+    <h3>Long Entry (Futures Long + Spot Long)</h3>
+    <p>ALL conditions must be true simultaneously:</p>
+    <ul class="rules-list">
+        <li>
+            <span class="check">&#x2713;</span>
+            <div><strong>Bull filter:</strong> BTC daily close &gt; 200-day SMA</div>
+        </li>
+        <li>
+            <span class="check">&#x2713;</span>
+            <div><strong>Breakout:</strong> Close &gt; previous 20-day Donchian high</div>
+        </li>
+        <li>
+            <span class="check">&#x2713;</span>
+            <div><strong>Volume:</strong> Volume &gt; 1.5x 20-day average</div>
+        </li>
+        <li>
+            <span class="check">&#x2713;</span>
+            <div><strong>Trend:</strong> Price &gt; 21-day EMA</div>
+        </li>
+    </ul>
+
+    <h3>Short Entry (Futures Short)</h3>
+    <p>ALL conditions must be true simultaneously:</p>
+    <ul class="rules-list">
+        <li class="short-rule">
+            <span class="check purple">&#x2713;</span>
+            <div><strong>Bear filter (death cross):</strong> BTC SMA(50) &lt; SMA(200) AND BTC close &lt; SMA(200)</div>
+        </li>
+        <li class="short-rule">
+            <span class="check purple">&#x2713;</span>
+            <div><strong>Breakdown:</strong> Close &lt; previous 10-day Donchian low</div>
+        </li>
+        <li class="short-rule">
+            <span class="check purple">&#x2713;</span>
+            <div><strong>Volume:</strong> Volume &gt; 2.0x 20-day average (higher threshold)</div>
+        </li>
+        <li class="short-rule">
+            <span class="check purple">&#x2713;</span>
+            <div><strong>Trend:</strong> Price &lt; 21-day EMA</div>
+        </li>
+    </ul>
+</section>
+
+<!-- ====== EXIT RULES ====== -->
+<section>
+    <h2><span class="icon">&#x1F6AA;</span> Exit Rules</h2>
+
+    <h3>Long Exits (any one triggers)</h3>
+    <div class="exit-grid">
+        <div class="exit-card">
+            <h5>&#x1F4C9; Trailing Stop</h5>
+            <span class="rule">price &lt; high_watermark - 4 &times; ATR(14)</span>
+            <span class="desc">Primary exit. Locks in gains as price rises, exits on pullback.</span>
+        </div>
+        <div class="exit-card">
+            <h5>&#x1F4C8; Donchian Exit</h5>
+            <span class="rule">close &lt; 10-day Donchian low</span>
+            <span class="desc">Catches trend reversals via channel breakdown.</span>
+        </div>
+        <div class="exit-card">
+            <h5>&#x1F6A8; Emergency Stop</h5>
+            <span class="rule">price &lt; entry - 15%</span>
+            <span class="desc">Hard floor for catastrophic moves. Always active.</span>
+        </div>
+        <div class="exit-card">
+            <h5>&#x1F4A5; Blow-Off Detection</h5>
+            <span class="rule">vol &gt; 3x avg AND RSI &gt; 80 &rarr; stop = 1.5x ATR</span>
+            <span class="desc">Tightens stop during parabolic tops to capture gains.</span>
+        </div>
+    </div>
+
+    <h3>Short Exits (any one triggers)</h3>
+    <div class="exit-grid">
+        <div class="exit-card">
+            <h5>&#x1F4C8; Trailing Stop</h5>
+            <span class="rule">price &gt; low_watermark + 2 &times; ATR(14)</span>
+            <span class="desc">Inverted trailing stop. Follows price down, exits on bounce.</span>
+        </div>
+        <div class="exit-card">
+            <h5>&#x1F4C9; Donchian Exit</h5>
+            <span class="rule">close &gt; 15-day Donchian high</span>
+            <span class="desc">Catches trend reversals via channel breakout.</span>
+        </div>
+        <div class="exit-card">
+            <h5>&#x1F6A8; Emergency Stop</h5>
+            <span class="rule">price &gt; entry + 15%</span>
+            <span class="desc">Hard floor for runaway rallies.</span>
+        </div>
+        <div class="exit-card">
+            <h5>&#x23F3; Max Hold</h5>
+            <span class="rule">hold_days &gt; 30</span>
+            <span class="desc">Prevents stale short positions from lingering.</span>
+        </div>
+    </div>
+
+    <h3>Partial Profit Taking</h3>
+    <p>Positions are scaled out in three stages to balance locking in gains vs. riding trends:</p>
+    <div class="tp-visual">
+        <div class="tp-segment tp1">TP1: 25%<br><small>at +10%</small></div>
+        <div class="tp-segment tp2">TP2: 25%<br><small>at +20%</small></div>
+        <div class="tp-segment runner">Runner: 50%<br><small>trailing stop</small></div>
+    </div>
+    <p style="font-size:0.85em;color:var(--text-muted)">For shorts: TP1 at -10% (price drop), TP2 at -20%, runner on trailing stop.</p>
+</section>
+
+<!-- ====== PYRAMIDING ====== -->
+<section>
+    <h2><span class="icon">&#x1F4B0;</span> Pyramiding (Adding to Winners)</h2>
+
+    <div class="workflow">
+        <h4>Pyramid Decision Flow</h4>
+        <div class="flow">
+            <div class="flow-decision">Position gain &ge; +15% ?</div>
+            <div class="flow-arrow"></div>
+            <div class="flow-decision">New 20-day Donchian high ?</div>
+            <div class="flow-arrow"></div>
+            <div class="flow-decision">Bull filter active ?</div>
+            <div class="flow-arrow"></div>
+            <div class="flow-decision">No prior pyramid on this position ?</div>
+            <div class="flow-arrow"></div>
+            <div class="flow-step highlight-green">
+                <strong>Add 1% Risk Tranche</strong>
+                Smaller than the initial 4% entry &mdash; max 1 add per position
+            </div>
+        </div>
+    </div>
+
+    <div class="callout green">
+        <strong>Impact</strong>
+        Pyramiding boosted returns from +47.9% to +80.9% and improved profit factor from 1.72 to 2.73 in the full-period backtest. Not enabled for shorts (insufficient live validation).
+    </div>
+</section>
+
+<!-- ====== POSITION SIZING ====== -->
+<section>
+    <h2><span class="icon">&#x1F4B5;</span> Position Sizing &amp; Capital</h2>
+
+    <div class="kpi-row">
+        <div class="kpi blue">
+            <div class="value">$10K</div>
+            <div class="label">Starting Capital</div>
+        </div>
+        <div class="kpi green">
+            <div class="value">4</div>
+            <div class="label">Max Positions</div>
+        </div>
+        <div class="kpi green">
+            <div class="value">4%</div>
+            <div class="label">Long Risk / Trade</div>
+        </div>
+        <div class="kpi purple">
+            <div class="value">2%</div>
+            <div class="label">Short Risk / Trade</div>
+        </div>
+    </div>
+
+    <h3>How Sizing Works</h3>
+    <div class="sizing-diagram">
+        <div class="sizing-box">
+            <div>Equity &times; Risk %</div>
+            <div class="formula">$10,000 &times; 4% = $400</div>
+            <div style="font-size:0.8em;color:var(--text-muted)">Dollar risk</div>
+        </div>
+        <div class="sizing-arrow">&divide;</div>
+        <div class="sizing-box">
+            <div>Stop Distance %</div>
+            <div class="formula">5%</div>
+            <div style="font-size:0.8em;color:var(--text-muted)">Based on 4x ATR</div>
+        </div>
+        <div class="sizing-arrow">=</div>
+        <div class="sizing-box">
+            <div>Position Size</div>
+            <div class="formula">$8,000</div>
+            <div style="font-size:0.8em;color:var(--text-muted)">Normalized by volatility</div>
+        </div>
+    </div>
+    <p style="font-size:0.88em;color:var(--text-muted)">Wider stops = smaller positions, tighter stops = larger positions. This normalizes risk across different volatility levels. All 3 modes share the same 4-position pool to prevent over-leveraging.</p>
+</section>
+
+<!-- ====== POSITION CONFLICTS ====== -->
+<section>
+    <h2><span class="icon">&#x26A0;</span> Position Conflicts &amp; Priorities</h2>
+
+    <div class="callout yellow">
+        <strong>Shared Pool Rule</strong>
+        All 3 modes compete for the same 4 position slots. A coin can only have ONE position across all modes. BTC-PERP-INTX (futures) blocks BTC-USD (spot) and vice versa.
+    </div>
+
+    <table>
+        <thead>
+            <tr><th>Priority</th><th>Action</th><th>Rationale</th></tr>
+        </thead>
+        <tbody>
+            <tr><td>1st</td><td>Exits processed</td><td>Free up slots before new entries</td></tr>
+            <tr><td>2nd</td><td>Futures long pyramiding</td><td>Lower fees on existing winners</td></tr>
+            <tr><td>3rd</td><td>Spot long pyramiding</td><td>Fallback for spot positions</td></tr>
+            <tr><td>4th</td><td>Futures long entries</td><td>Claims new slots at 0.06% fees</td></tr>
+            <tr><td>5th</td><td>Spot long entries</td><td>Only for coins without perps (NEAR)</td></tr>
+            <tr><td>6th</td><td>Short entries</td><td>Only during confirmed bear market</td></tr>
+        </tbody>
+    </table>
+</section>
+
+<!-- ====== REGIME FILTERS ====== -->
+<section>
+    <h2><span class="icon">&#x1F5C2;</span> Regime Filters</h2>
+
+    <div class="mode-cards">
+        <div class="mode-card spot-long" style="border-color:var(--green)">
+            <h4>Bull Filter (Gates Long Entries)</h4>
+            <div class="detail-row"><span class="lbl">Rule</span> BTC close &gt; 200-day SMA</div>
+            <div class="detail-row">
+                <span class="lbl">Status</span>
+                <span class="regime-status inactive"><span class="regime-dot red"></span> BEAR &mdash; Longs Blocked</span>
+            </div>
+            <div class="detail-row"><span class="lbl">Impact</span> DD 20% &rarr; 15%, PF 1.45 &rarr; 1.72</div>
+            <p style="font-size:0.8em;color:var(--text-muted);margin-top:8px">When inactive: no new long entries. Existing positions still managed normally.</p>
+        </div>
+
+        <div class="mode-card futures-short" style="border-color:var(--purple)">
+            <h4>Bear Filter (Gates Short Entries)</h4>
+            <div class="detail-row"><span class="lbl">Rule</span> SMA(50) &lt; SMA(200) AND BTC &lt; SMA(200)</div>
+            <div class="detail-row">
+                <span class="lbl">Status</span>
+                <span class="regime-status active"><span class="regime-dot green"></span> ACTIVE &mdash; Shorts Enabled</span>
+            </div>
+            <div class="detail-row"><span class="lbl">Impact</span> +15% vs +6.7% (SMA-only), DD 9% vs 22%</div>
+            <p style="font-size:0.8em;color:var(--text-muted);margin-top:8px">More restrictive than bull filter &mdash; requires both MA cross AND price confirmation (death cross).</p>
+        </div>
+    </div>
+</section>
+
+<!-- ====== COINS ====== -->
+<section>
+    <h2><span class="icon">&#x1FA99;</span> Coin Universe</h2>
+
+    <h3>Spot Long (8 coins)</h3>
+    <div class="coin-tags">
+        <span class="coin-tag">BTC</span>
+        <span class="coin-tag">ETH</span>
+        <span class="coin-tag">SOL</span>
+        <span class="coin-tag">XRP</span>
+        <span class="coin-tag">SUI</span>
+        <span class="coin-tag">LINK</span>
+        <span class="coin-tag">ADA</span>
+        <span class="coin-tag special">NEAR</span>
+    </div>
+
+    <h3>Futures Long (8 coins)</h3>
+    <div class="coin-tags">
+        <span class="coin-tag">BTC</span>
+        <span class="coin-tag">ETH</span>
+        <span class="coin-tag">SOL</span>
+        <span class="coin-tag">XRP</span>
+        <span class="coin-tag">SUI</span>
+        <span class="coin-tag">LINK</span>
+        <span class="coin-tag">ADA</span>
+        <span class="coin-tag special">DOGE</span>
+    </div>
+
+    <h3>Futures Short (8 coins)</h3>
+    <div class="coin-tags">
+        <span class="coin-tag">BTC</span>
+        <span class="coin-tag">ETH</span>
+        <span class="coin-tag">SOL</span>
+        <span class="coin-tag">XRP</span>
+        <span class="coin-tag">SUI</span>
+        <span class="coin-tag">LINK</span>
+        <span class="coin-tag">ADA</span>
+        <span class="coin-tag">DOGE</span>
+    </div>
+
+    <p style="font-size:0.88em;color:var(--text-muted);margin-top:12px"><strong>NEAR</strong> trades spot only (no Coinbase perp). <strong>DOGE</strong> trades futures only (replaced NEAR in perp lists). 7 coins overlap &mdash; with futures-first priority, they route through perps at lower fees.</p>
+</section>
+
+<!-- ====== TIMING ====== -->
+<section>
+    <h2><span class="icon">&#x23F0;</span> Timing</h2>
+    <table>
+        <thead><tr><th>Event</th><th>Schedule</th></tr></thead>
+        <tbody>
+            <tr><td>Daily signal check</td><td><strong>00:15 UTC</strong> (15 min after daily candle close)</td></tr>
+            <tr><td>Trailing stop checks</td><td><strong>Every 30 minutes</strong></td></tr>
+            <tr><td>Daily summary (Telegram)</td><td><strong>20:00 UTC</strong> (noon PST)</td></tr>
+            <tr><td>Config reload from Supabase</td><td>Every daily check + every stop check loop</td></tr>
+        </tbody>
+    </table>
+</section>
+
+<!-- ====== RETURN PROJECTIONS ====== -->
+<section>
+    <h2><span class="icon">&#x1F4C8;</span> Return Projections ($10,000 Starting Capital)</h2>
+
+    <h3>4-Year Backtest (2022&ndash;2025)</h3>
+    <table>
+        <thead><tr><th>Metric</th><th>Value</th></tr></thead>
+        <tbody>
+            <tr><td>Long side (futures, 4% risk)</td><td style="color:var(--green);font-weight:600">+370%</td></tr>
+            <tr><td>Short side (futures, 2% risk)</td><td style="color:var(--green);font-weight:600">+15%</td></tr>
+            <tr><td><strong>Combined</strong></td><td style="color:var(--green);font-weight:700;font-size:1.1em">+385% ($10K &rarr; $48.5K)</td></tr>
+            <tr><td>CAGR</td><td>48.4%</td></tr>
+            <tr><td>Max drawdown</td><td>~26%</td></tr>
+            <tr><td>Win rate</td><td>~65&ndash;79%</td></tr>
+            <tr><td>Profit factor</td><td>~2.5</td></tr>
+        </tbody>
+    </table>
+
+    <h3>10-Year Compound Projection</h3>
+    <div class="chart-bars">
+        <div class="chart-bar-col">
+            <div class="chart-bar" style="height:4.5%"><span class="bar-value">$14.8K</span></div>
+            <div class="chart-bar-label">Yr 1</div>
+        </div>
+        <div class="chart-bar-col">
+            <div class="chart-bar" style="height:6.4%"><span class="bar-value">$20.9K</span></div>
+            <div class="chart-bar-label">Yr 2</div>
+        </div>
+        <div class="chart-bar-col">
+            <div class="chart-bar" style="height:9%"><span class="bar-value">$29.6K</span></div>
+            <div class="chart-bar-label">Yr 3</div>
+        </div>
+        <div class="chart-bar-col">
+            <div class="chart-bar" style="height:12.7%"><span class="bar-value">$41.7K</span></div>
+            <div class="chart-bar-label">Yr 4</div>
+        </div>
+        <div class="chart-bar-col">
+            <div class="chart-bar" style="height:17.9%"><span class="bar-value">$58.9K</span></div>
+            <div class="chart-bar-label">Yr 5</div>
+        </div>
+        <div class="chart-bar-col">
+            <div class="chart-bar" style="height:25.2%"><span class="bar-value">$83.1K</span></div>
+            <div class="chart-bar-label">Yr 6</div>
+        </div>
+        <div class="chart-bar-col">
+            <div class="chart-bar" style="height:35.6%"><span class="bar-value">$117K</span></div>
+            <div class="chart-bar-label">Yr 7</div>
+        </div>
+        <div class="chart-bar-col">
+            <div class="chart-bar" style="height:50.2%"><span class="bar-value">$166K</span></div>
+            <div class="chart-bar-label">Yr 8</div>
+        </div>
+        <div class="chart-bar-col">
+            <div class="chart-bar" style="height:70.9%"><span class="bar-value">$234K</span></div>
+            <div class="chart-bar-label">Yr 9</div>
+        </div>
+        <div class="chart-bar-col">
+            <div class="chart-bar" style="height:100%"><span class="bar-value">$330K</span></div>
+            <div class="chart-bar-label">Yr 10</div>
+        </div>
+    </div>
+
+    <table>
+        <thead><tr><th>Year</th><th>Start</th><th>Net Gain</th><th>End</th><th>Monthly</th></tr></thead>
+        <tbody>
+            <tr><td>1</td><td>$10,000</td><td>$4,840</td><td>$14,840</td><td>$403/mo</td></tr>
+            <tr><td>2</td><td>$14,840</td><td>$6,105</td><td>$20,945</td><td>$509/mo</td></tr>
+            <tr><td>3</td><td>$20,945</td><td>$8,617</td><td>$29,562</td><td>$718/mo</td></tr>
+            <tr><td>4</td><td>$29,562</td><td>$12,162</td><td>$41,724</td><td>$1,014/mo</td></tr>
+            <tr><td>5</td><td>$41,724</td><td>$17,166</td><td>$58,890</td><td>$1,430/mo</td></tr>
+            <tr><td>6</td><td>$58,890</td><td>$24,228</td><td>$83,118</td><td>$2,019/mo</td></tr>
+            <tr><td>7</td><td>$83,118</td><td>$34,195</td><td>$117,313</td><td>$2,850/mo</td></tr>
+            <tr><td>8</td><td>$117,313</td><td>$48,263</td><td>$165,575</td><td>$4,022/mo</td></tr>
+            <tr><td>9</td><td>$165,575</td><td>$68,118</td><td>$233,694</td><td>$5,677/mo</td></tr>
+            <tr><td>10</td><td>$233,694</td><td>$96,143</td><td style="color:var(--green);font-weight:700">$329,837</td><td style="color:var(--green);font-weight:600">$8,012/mo</td></tr>
+        </tbody>
+    </table>
+    <p style="font-size:0.85em;color:var(--text-muted);margin-top:8px">Assumes 15% tax on gains over $5K. Bear years will be flat/slightly positive; bull years drive the majority of returns.</p>
+</section>
+
+<!-- ====== INTRADAY BOT ====== -->
+<section>
+    <h2><span class="icon">&#x26A1;</span> Intraday Bot (Experimental)</h2>
+    <p>Runs alongside the Donchian bot in a separate screen session. Completely independent capital pool.</p>
+
+    <table>
+        <thead><tr><th>Parameter</th><th>Value</th></tr></thead>
+        <tbody>
+            <tr><td>Strategy</td><td>MTF Momentum &mdash; daily trend + hourly RSI dip + volume</td></tr>
+            <tr><td>ADX gate</td><td>Only trades when BTC daily ADX &ge; 25 (trending)</td></tr>
+            <tr><td>Coins</td><td>8 altcoins (excludes BTC), max 3 positions</td></tr>
+            <tr><td>Risk</td><td>1.5% per trade, 2x leverage</td></tr>
+            <tr><td>Fees</td><td>Futures (0.06%/side)</td></tr>
+            <tr><td>Backtest</td><td style="color:var(--green)">+69% over 12 months, PF 1.65, $108/day avg</td></tr>
+            <tr><td>Status</td><td>Paper trading, not yet in TradeSavvy dashboard</td></tr>
+        </tbody>
+    </table>
+</section>
+
+<!-- ====== BACKTESTING ====== -->
+<section>
+    <h2><span class="icon">&#x1F9EA;</span> Backtesting Summary</h2>
+
+    <h3>Strategy Approval Criteria</h3>
+    <table>
+        <thead><tr><th>Path</th><th>Style</th><th>Requirements</th></tr></thead>
+        <tbody>
+            <tr><td>Path A</td><td>Mean reversion</td><td>55%+ WR AND 1.5+ PF</td></tr>
+            <tr><td>Path B</td><td>Trend following</td><td>1.8+ PF AND avg_win/avg_loss &ge; 1.5 AND 10+ trades</td></tr>
+        </tbody>
+    </table>
+
+    <h3>Key Backtest Results</h3>
+    <table>
+        <thead><tr><th>Test</th><th>Trades</th><th>WR</th><th>PF</th><th>Return</th><th>MaxDD</th></tr></thead>
+        <tbody>
+            <tr><td>Baseline (bull filter only)</td><td>66</td><td>43.9%</td><td>1.72</td><td>+47.9%</td><td>14.9%</td></tr>
+            <tr style="background:var(--green-dim)"><td><strong>4x ATR + pyramid</strong></td><td><strong>90</strong></td><td><strong>64.4%</strong></td><td><strong>2.73</strong></td><td style="color:var(--green)"><strong>+80.9%</strong></td><td><strong>13.8%</strong></td></tr>
+            <tr><td>Walk-forward OOS</td><td>20</td><td>70.0%</td><td>1.60</td><td>+4.9%</td><td>8.2%</td></tr>
+            <tr style="background:var(--purple-dim)"><td><strong>Short (death cross)</strong></td><td><strong>16</strong></td><td><strong>62.5%</strong></td><td><strong>2.73</strong></td><td style="color:var(--purple)"><strong>+15.0%</strong></td><td><strong>9.0%</strong></td></tr>
+            <tr style="background:var(--blue-dim)"><td><strong>Combined long+short</strong></td><td>&mdash;</td><td>&mdash;</td><td>&mdash;</td><td style="color:var(--blue)"><strong>+110.4%</strong></td><td><strong>13.2%</strong></td></tr>
+        </tbody>
+    </table>
+
+    <h3>What Was Tested and Rejected</h3>
+    <div class="rejected-item">
+        <span class="x-mark">&#x2717;</span>
+        <div><span class="test-name">Weekly MTF entry filter</span><br><span class="test-reason">Over-filtered, starved opportunities &mdash; reduced OOS returns</span></div>
+    </div>
+    <div class="rejected-item">
+        <span class="x-mark">&#x2717;</span>
+        <div><span class="test-name">ADX conviction filter</span><br><span class="test-reason">Breakouts start when ADX is low &mdash; negative OOS</span></div>
+    </div>
+    <div class="rejected-item">
+        <span class="x-mark">&#x2717;</span>
+        <div><span class="test-name">18-coin expansion</span><br><span class="test-reason">Position slot competition &mdash; -2.7% OOS vs +3.5% with 8 coins</span></div>
+    </div>
+    <div class="rejected-item">
+        <span class="x-mark">&#x2717;</span>
+        <div><span class="test-name">Ranging overlay (hourly)</span><br><span class="test-reason">All 10 variants PF &lt; 1.0 &mdash; no viable mean reversion on crypto hourly</span></div>
+    </div>
+    <div class="rejected-item">
+        <span class="x-mark">&#x2717;</span>
+        <div><span class="test-name">Multi-market (NQ, ES, forex)</span><br><span class="test-reason">All negative OOS &mdash; crypto momentum is unique</span></div>
+    </div>
+    <div class="rejected-item">
+        <span class="x-mark">&#x2717;</span>
+        <div><span class="test-name">15-minute timeframe</span><br><span class="test-reason">All 216 configs negative &mdash; too noisy</span></div>
+    </div>
+    <div class="rejected-item">
+        <span class="x-mark">&#x2717;</span>
+        <div><span class="test-name">Hybrid core/satellite</span><br><span class="test-reason">+92% vs bot +111% &mdash; bull filter protects better than buy-and-hold</span></div>
+    </div>
+</section>
+
+<!-- ====== FEE STRUCTURE ====== -->
+<section>
+    <h2><span class="icon">&#x1F4B3;</span> Fee Structure</h2>
+    <table>
+        <thead><tr><th>Venue</th><th>Taker Fee</th><th>Used For</th></tr></thead>
+        <tbody>
+            <tr><td>Coinbase CFM Perps</td><td style="color:var(--green);font-weight:600">0.06% / side</td><td>Futures longs + shorts (primary)</td></tr>
+            <tr><td>Coinbase Spot ($1K-$10K tier)</td><td style="color:var(--red)">0.50% / side</td><td>Spot longs (fallback, NEAR only)</td></tr>
+        </tbody>
+    </table>
+    <div class="callout green">
+        <strong>Key Insight</strong>
+        The switch from spot to futures for long entries is the single biggest optimization lever: ~8x lower fees roughly doubles net returns over 4 years.
+    </div>
+</section>
+
+<!-- ====== INFRASTRUCTURE ====== -->
+<section>
+    <h2><span class="icon">&#x1F5A5;</span> Infrastructure</h2>
+    <table>
+        <thead><tr><th>Component</th><th>Details</th></tr></thead>
+        <tbody>
+            <tr><td>Language</td><td>Python 3.14, venv</td></tr>
+            <tr><td>Hosting</td><td>AWS EC2 t3.small, Ubuntu 24.04</td></tr>
+            <tr><td>Dashboard</td><td>TradeSavvy (tradesavvy.io) &mdash; React + FastAPI + Supabase</td></tr>
+            <tr><td>Notifications</td><td>Telegram Bot API (per-user config)</td></tr>
+            <tr><td>Data</td><td>Coinbase Public API (market data), Coinbase CFM API (futures)</td></tr>
+            <tr><td>Source</td><td>GitHub: jasondnichol/ResearchAgent + jasondnichol/tradesavvy</td></tr>
+        </tbody>
+    </table>
+</section>
+
+<!-- ====== IMPORTANT RULES ====== -->
+<section>
+    <h2><span class="icon">&#x1F6E1;</span> Important Rules</h2>
+    <div class="callout red">
+        <strong>Safety Rules</strong>
+        <ul style="margin-top:8px;padding-left:20px;line-height:2">
+            <li><strong>Paper trading only</strong> until validation is complete</li>
+            <li><strong>Never switch to live</strong> without explicit owner approval</li>
+            <li><strong>Never commit API keys</strong> to git (use .env + load_dotenv)</li>
+            <li><strong>Always test locally</strong> before deploying to EC2</li>
+        </ul>
+    </div>
+</section>
+
+</div>
+
+<!-- ====== FOOTER ====== -->
+<div class="footer">
+    TradeSavvy Trading System &mdash; Strategy Guide &mdash; March 2026<br>
+    Paper Trading Only &mdash; Not Financial Advice
+</div>
+
+</body>
+</html>

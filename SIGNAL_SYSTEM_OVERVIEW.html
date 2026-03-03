@@ -1,0 +1,911 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TradeSavvy Signal System — Complete Technical Overview</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --card: #1a1d27;
+    --card-alt: #222636;
+    --border: #2d3348;
+    --text: #e0e4ef;
+    --text-muted: #8b92a8;
+    --accent: #6c8cff;
+    --green: #22c55e;
+    --red: #ef4444;
+    --yellow: #eab308;
+    --orange: #f97316;
+    --purple: #a78bfa;
+    --cyan: #22d3ee;
+    --pink: #ec4899;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.65;
+    padding: 2rem;
+  }
+  .container { max-width: 1100px; margin: 0 auto; }
+
+  h1 { font-size: 2rem; color: #fff; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.5rem; color: var(--accent); margin: 2.5rem 0 1rem; border-bottom: 2px solid var(--border); padding-bottom: 0.5rem; }
+  h3 { font-size: 1.15rem; color: var(--cyan); margin: 1.5rem 0 0.75rem; }
+  h4 { font-size: 1rem; color: var(--purple); margin: 1rem 0 0.5rem; }
+  .subtitle { color: var(--text-muted); font-size: 0.95rem; margin-bottom: 2rem; }
+
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1.5rem;
+    margin-bottom: 1.25rem;
+  }
+  .card-alt { background: var(--card-alt); }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 0.75rem 0 1rem;
+    font-size: 0.88rem;
+  }
+  th, td {
+    text-align: left;
+    padding: 0.55rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+  }
+  th { color: var(--accent); font-weight: 600; background: rgba(108,140,255,0.08); }
+  td { color: var(--text); }
+  tr:last-child td { border-bottom: none; }
+
+  code {
+    background: rgba(108,140,255,0.12);
+    color: var(--cyan);
+    padding: 0.15rem 0.4rem;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  }
+  pre {
+    background: #12141e;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1rem;
+    overflow-x: auto;
+    font-size: 0.82rem;
+    line-height: 1.5;
+    color: var(--text);
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    margin: 0.5rem 0 1rem;
+  }
+
+  .badge {
+    display: inline-block;
+    padding: 0.2rem 0.6rem;
+    border-radius: 6px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+  .badge-green { background: rgba(34,197,94,0.15); color: var(--green); }
+  .badge-red { background: rgba(239,68,68,0.15); color: var(--red); }
+  .badge-yellow { background: rgba(234,179,8,0.15); color: var(--yellow); }
+  .badge-purple { background: rgba(167,139,250,0.15); color: var(--purple); }
+  .badge-cyan { background: rgba(34,211,238,0.15); color: var(--cyan); }
+  .badge-orange { background: rgba(249,115,22,0.15); color: var(--orange); }
+  .badge-pink { background: rgba(236,72,153,0.15); color: var(--pink); }
+
+  .method-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+  }
+  .method-icon {
+    width: 42px; height: 42px;
+    border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.3rem;
+    flex-shrink: 0;
+  }
+
+  .flow-step {
+    display: flex;
+    align-items: flex-start;
+    gap: 1rem;
+    margin-bottom: 0.75rem;
+  }
+  .flow-num {
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    background: var(--accent);
+    color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.8rem;
+    font-weight: 700;
+    flex-shrink: 0;
+    margin-top: 0.1rem;
+  }
+
+  .warn-box {
+    background: rgba(239,68,68,0.08);
+    border: 1px solid rgba(239,68,68,0.25);
+    border-left: 4px solid var(--red);
+    border-radius: 8px;
+    padding: 1rem 1.25rem;
+    margin: 1rem 0;
+    font-size: 0.9rem;
+  }
+  .info-box {
+    background: rgba(108,140,255,0.08);
+    border: 1px solid rgba(108,140,255,0.25);
+    border-left: 4px solid var(--accent);
+    border-radius: 8px;
+    padding: 1rem 1.25rem;
+    margin: 1rem 0;
+    font-size: 0.9rem;
+  }
+  .ok-box {
+    background: rgba(34,197,94,0.08);
+    border: 1px solid rgba(34,197,94,0.25);
+    border-left: 4px solid var(--green);
+    border-radius: 8px;
+    padding: 1rem 1.25rem;
+    margin: 1rem 0;
+    font-size: 0.9rem;
+  }
+
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+  @media (max-width: 768px) { .grid-2 { grid-template-columns: 1fr; } }
+
+  .toc { list-style: none; }
+  .toc li { margin-bottom: 0.4rem; }
+  .toc a { color: var(--accent); text-decoration: none; font-size: 0.95rem; }
+  .toc a:hover { text-decoration: underline; }
+  .toc .toc-sub { margin-left: 1.25rem; color: var(--text-muted); }
+  .toc .toc-sub a { color: var(--text-muted); font-size: 0.88rem; }
+
+  .divider { border-top: 1px solid var(--border); margin: 2rem 0; }
+
+  ul, ol { margin-left: 1.25rem; margin-bottom: 0.75rem; }
+  li { margin-bottom: 0.3rem; }
+  p { margin-bottom: 0.75rem; }
+  strong { color: #fff; }
+</style>
+</head>
+<body>
+<div class="container">
+
+<!-- ═══════════════════════════════════════════════ TITLE ═══════════════════════════════════════════ -->
+<h1>TradeSavvy Signal System</h1>
+<p class="subtitle">Complete technical overview — Trade setup generation, signal accuracy tracking, and known gaps. March 2026.</p>
+
+<!-- TOC -->
+<div class="card">
+  <h3 style="margin-top:0;">Contents</h3>
+  <ul class="toc">
+    <li><a href="#part1">Part 1 — Trade Setup Generation (The 3 Methods)</a></li>
+    <li class="toc-sub"><a href="#smc">1A. Smart Money Concepts (SMC)</a></li>
+    <li class="toc-sub"><a href="#elliott">1B. Elliott Wave</a></li>
+    <li class="toc-sub"><a href="#priceaction">1C. Price Action + Volume</a></li>
+    <li class="toc-sub"><a href="#technical">1D. Technical Analysis (no setups — directional only)</a></li>
+    <li class="toc-sub"><a href="#comparison">1E. Side-by-Side Comparison</a></li>
+    <li><a href="#part2">Part 2 — Signal Accuracy Tracking</a></li>
+    <li class="toc-sub"><a href="#recording">2A. Recording Signals (quality gates + dedup)</a></li>
+    <li class="toc-sub"><a href="#resolution">2B. Resolving Signals (WIN / LOSS / NEUTRAL)</a></li>
+    <li class="toc-sub"><a href="#stats">2C. Accuracy Stats Aggregation</a></li>
+    <li><a href="#part3">Part 3 — Known Gaps & Audit Checklist</a></li>
+  </ul>
+</div>
+
+<!-- ═══════════════════════════════════════════════ PART 1 ═══════════════════════════════════════════ -->
+<h2 id="part1">Part 1 — Trade Setup Generation</h2>
+<p>Three methods produce complete trade setups (entry, SL, TP). A fourth method (Technical Analysis) produces <em>directional signals only</em> — no entry/SL/TP levels. All methods run every 5 minutes via the alert worker across multiple timeframes.</p>
+
+<div class="info-box">
+  <strong>Key file locations</strong> (all under <code>C:\tradesavvy\backend\signals\</code>):<br>
+  <code>signal_smc.py</code> · <code>signal_elliott.py</code> · <code>signal_priceaction.py</code> · <code>signal_technical.py</code><br>
+  Orchestrator: <code>C:\tradesavvy\backend\alert_worker.py</code>
+</div>
+
+<!-- ────────────────── SMC ────────────────── -->
+<h3 id="smc">1A. Smart Money Concepts (SMC)</h3>
+<div class="card">
+  <div class="method-header">
+    <div class="method-icon" style="background:rgba(167,139,250,0.15);">🏦</div>
+    <div>
+      <strong style="font-size:1.1rem;">Smart Money Concepts</strong><br>
+      <span style="color:var(--text-muted);font-size:0.85rem;">Timeframes: 1h · 4h · 1d &nbsp;|&nbsp; File: signal_smc.py</span>
+    </div>
+  </div>
+
+  <h4>Core Structures Detected</h4>
+  <table>
+    <tr><th>Structure</th><th>How It's Found</th><th>Key Params</th></tr>
+    <tr>
+      <td><strong>Swing Highs/Lows</strong></td>
+      <td>Rolling window comparison: <code>high[i] == max(high[i-w : i+w+1])</code></td>
+      <td>Window: 1h→7, 4h→10, 1d→10</td>
+    </tr>
+    <tr>
+      <td><strong>BOS</strong> (Break of Structure)</td>
+      <td>Higher high in uptrend = bullish BOS, lower low in downtrend = bearish BOS</td>
+      <td>Trend continuation signal</td>
+    </tr>
+    <tr>
+      <td><strong>CHoCH</strong> (Change of Character)</td>
+      <td>Lower high in uptrend → bearish CHoCH, higher low in downtrend → bullish CHoCH</td>
+      <td>Trend reversal signal</td>
+    </tr>
+    <tr>
+      <td><strong>Order Blocks</strong></td>
+      <td>Candle where next candle surges &gt; 2× ATR(14) in opposite direction</td>
+      <td>Bullish OB = last bearish candle before surge up; returns last 8</td>
+    </tr>
+    <tr>
+      <td><strong>Fair Value Gaps</strong></td>
+      <td>3-candle gap: <code>candle[i+1].low > candle[i-1].high</code> (bullish FVG)</td>
+      <td>Returns last 8 FVGs</td>
+    </tr>
+    <tr>
+      <td><strong>Liquidity Levels</strong></td>
+      <td>Clusters of equal highs/lows within 0.1% over a 20-bar lookahead</td>
+      <td>Top 5 deduplicated levels</td>
+    </tr>
+  </table>
+
+  <h4>Signal Scoring</h4>
+  <p>Accumulates <code>bull_score</code> vs <code>bear_score</code>:</p>
+  <table>
+    <tr><th>Condition</th><th>Points</th></tr>
+    <tr><td>Near bullish/bearish order block (within 3% of last 3 OBs)</td><td>+33 per match (max 99)</td></tr>
+    <tr><td>Last BOS direction matches</td><td>+33</td></tr>
+    <tr><td>Unfilled FVG nearby (last 3)</td><td>+17 per match (max 51)</td></tr>
+    <tr><td>Last CHoCH direction matches</td><td>+17</td></tr>
+  </table>
+  <p><strong>Signal gate:</strong> score &ge; 50 AND higher than opposing score → BUY or SELL. Otherwise HOLD.</p>
+  <p><strong>Confidence:</strong> <code>min(100, max(bull_score, bear_score))</code></p>
+
+  <h4>Trade Setup Derivation</h4>
+  <table>
+    <tr><th>Level</th><th>How Derived</th><th>Notes</th></tr>
+    <tr>
+      <td><span class="badge badge-cyan">ENTRY</span></td>
+      <td>Nearest order block price matching signal direction</td>
+      <td>BUY → most recent bullish OB's low; SELL → most recent bearish OB's high. <strong>This is a limit-order level</strong>, often away from current price.</td>
+    </tr>
+    <tr>
+      <td><span class="badge badge-red">STOP LOSS</span></td>
+      <td><strong>Fixed 3% from entry</strong></td>
+      <td>BUY: <code>entry × 0.97</code> · SELL: <code>entry × 1.03</code>. Does NOT adapt to structure or volatility.</td>
+    </tr>
+    <tr>
+      <td><span class="badge badge-green">TAKE PROFIT</span></td>
+      <td>Nearest opposing structure level above/below entry</td>
+      <td>BUY: min of (bearish OB prices + liq levels above entry). SELL: max of (bullish OB prices + liq levels below entry). <strong>Single TP only.</strong></td>
+    </tr>
+  </table>
+
+  <p><strong>Risk/Reward:</strong> <code>|TP − entry| / |entry − SL|</code>. Only calculated when entry, SL, and TP all exist.</p>
+
+  <h4>Conviction</h4>
+  <table>
+    <tr><th>Tier</th><th>Conditions</th></tr>
+    <tr><td><span class="badge badge-green">HIGH</span></td><td><code>confidence &ge; 67</code> AND <code>R:R &ge; 2.0</code> AND trend matches signal direction</td></tr>
+    <tr><td><span class="badge badge-yellow">LOW</span></td><td>Any non-HOLD signal with a complete trade setup that doesn't meet HIGH</td></tr>
+    <tr><td><span class="badge badge-purple">STRONG</span></td><td>Upgraded when <code>confidence &ge; 75</code> (BUY → STRONG_BUY)</td></tr>
+  </table>
+
+  <div class="warn-box">
+    <strong>Audit flags for SMC:</strong>
+    <ul style="margin-top:0.5rem;">
+      <li><strong>Fixed 3% stop</strong> — Ignores ATR/volatility. A 3% stop on BTC ($2,800) vs ADA ($0.02) have wildly different structural significance. Consider ATR-based or structure-based SL.</li>
+      <li><strong>Entry can be far from price</strong> — OB prices can be stale (old candles). The 20% quality gate catches extremes but a 15% distance is still borderline.</li>
+      <li><strong>Single TP only</strong> — No partial profit-taking. If the opposing structure is very far, R:R can be inflated and unrealistic.</li>
+      <li><strong>"Near OB" is within 3%</strong> — Quite generous. Price might not actually retrace to the OB.</li>
+    </ul>
+  </div>
+</div>
+
+<!-- ────────────────── ELLIOTT ────────────────── -->
+<h3 id="elliott">1B. Elliott Wave</h3>
+<div class="card">
+  <div class="method-header">
+    <div class="method-icon" style="background:rgba(34,211,238,0.15);">🌊</div>
+    <div>
+      <strong style="font-size:1.1rem;">Elliott Wave</strong><br>
+      <span style="color:var(--text-muted);font-size:0.85rem;">Timeframes: 1h · 4h · 1d &nbsp;|&nbsp; File: signal_elliott.py</span>
+    </div>
+  </div>
+
+  <h4>Wave Detection Pipeline</h4>
+  <div class="flow-step"><div class="flow-num">1</div><div><strong>Zigzag filter</strong> — Smooths price into swing pivots using min-move thresholds: <code>15m: 0.8%</code>, <code>1h: 1.5%</code>, <code>4h: 2.5%</code>, <code>1d: 3.0%</code></div></div>
+  <div class="flow-step"><div class="flow-num">2</div><div><strong>Pattern labeling</strong> — Takes most recent 6–10 pivots, tries to fit a 5-wave impulse. Tests multiple starting offsets. Falls back to partial 4-wave pattern if 5-wave fails.</div></div>
+  <div class="flow-step"><div class="flow-num">3</div><div><strong>Rule validation</strong> — Checks 3 cardinal Elliott rules:
+    <ul>
+      <li>Wave 2 cannot retrace &gt; 100% of Wave 1</li>
+      <li>Wave 3 cannot be the shortest impulse wave</li>
+      <li>Wave 4 cannot overlap Wave 1 territory</li>
+    </ul>
+    <code>rules_valid = True</code> only if all pass.
+  </div></div>
+  <div class="flow-step"><div class="flow-num">4</div><div><strong>Fibonacci projections</strong> — Extension targets (1.0×, 1.272×, 1.618×, 2.0×, 2.618× of Wave 1 length) and correction targets (23.6%, 38.2%, 50%, 61.8%, 78.6% of full move).</div></div>
+
+  <h4>Signal Decision</h4>
+  <table>
+    <tr><th>Impulse Direction</th><th>At Wave 2 or 4</th><th>At Wave 1 or 3</th><th>At Wave &ge; 5</th></tr>
+    <tr><td>Bullish</td><td>BUY</td><td>BUY</td><td>SELL (reversal)</td></tr>
+    <tr><td>Bearish</td><td>SELL</td><td>SELL</td><td>BUY (reversal)</td></tr>
+  </table>
+
+  <h4>Confidence Scoring</h4>
+  <table>
+    <tr><th>Current Wave</th><th>Rules Valid</th><th>Rules Invalid</th><th>Cap</th></tr>
+    <tr><td>Wave 2 or 4 (corrective — best entry)</td><td>55</td><td>35</td><td rowspan="3">Hard cap: <strong>70</strong><br>(Elliott is subjective)</td></tr>
+    <tr><td>Wave &ge; 5 (completed)</td><td>50</td><td>30</td></tr>
+    <tr><td>Wave 1 or 3 (impulse)</td><td>45</td><td>25</td></tr>
+  </table>
+
+  <h4>Trade Setup Derivation</h4>
+  <table>
+    <tr><th>Level</th><th>How Derived</th><th>Notes</th></tr>
+    <tr>
+      <td><span class="badge badge-cyan">ENTRY</span></td>
+      <td><strong>Current market price</strong> (<code>round(current_price, 2)</code>)</td>
+      <td>Always at-market. An "optimal entry" (wave pivot) is computed but stored separately — not used as the tracked entry.</td>
+    </tr>
+    <tr>
+      <td><span class="badge badge-red">STOP LOSS</span></td>
+      <td><strong>Nearest wave pivot</strong> on the wrong side of the trade</td>
+      <td>BUY: highest wave price still below current. SELL: lowest wave price still above current. Labeled e.g. "Wave 2".</td>
+    </tr>
+    <tr>
+      <td><span class="badge badge-green">TP1</span></td>
+      <td>Fibonacci extension index [0] — approx 1.0× extension</td>
+      <td rowspan="3">Sourced from wave extension targets first. Falls back to correction retracement targets (38.2%, 50%, 61.8%) if insufficient extensions. Each TP has a label like "Wave 5 — 1.618×".</td>
+    </tr>
+    <tr>
+      <td><span class="badge badge-green">TP2</span></td>
+      <td>Fibonacci extension index [2] — approx 1.618× extension</td>
+    </tr>
+    <tr>
+      <td><span class="badge badge-green">TP3</span></td>
+      <td>Fibonacci extension index [min(4, len-1)] — approx 2.618× extension</td>
+    </tr>
+  </table>
+
+  <p><strong>R:R calculation:</strong> Based on TP1 (most conservative): <code>|TP1 − entry| / |entry − SL|</code>. If R:R can't be computed, the <em>entire trade setup is cleared</em> (entry, SL, all TPs set to null).</p>
+
+  <h4>Conviction</h4>
+  <table>
+    <tr><th>Tier</th><th>Conditions (ALL must be true)</th></tr>
+    <tr><td><span class="badge badge-green">HIGH</span></td><td><code>R:R &ge; 2.0</code> AND <code>stop distance &ge; 1.5% of entry</code> AND <code>wave is 2 or 4</code> AND <code>rules_valid</code> AND <code>confidence &ge; 50</code></td></tr>
+    <tr><td><span class="badge badge-yellow">LOW</span></td><td>Any non-HOLD with complete trade setup that doesn't meet HIGH</td></tr>
+    <tr><td><span class="badge badge-purple">STRONG</span></td><td>Upgraded when <code>confidence &ge; 55</code> AND <code>rules_valid</code></td></tr>
+  </table>
+
+  <div class="warn-box">
+    <strong>Audit flags for Elliott:</strong>
+    <ul style="margin-top:0.5rem;">
+      <li><strong>Entry = current price</strong> — This is always at-market. The signal is essentially "enter now." The tracker records this immediately, so the "entry reachability" check in resolution logic will always pass (entry ≈ signal price). This is inconsistent with SMC/PA which give limit-order entries.</li>
+      <li><strong>SL from wave pivot</strong> — If the nearest wave pivot is very close (e.g. 0.5%), the stop is tight and gets flagged by the 1.5% conviction gate. But it can also be very far (10%+), creating a huge risk per trade.</li>
+      <li><strong>Wave labeling is heuristic</strong> — Tries multiple starting points and takes the first valid one. The same price data can produce different wave counts depending on which window it starts from. Confidence is capped at 70 to reflect this subjectivity.</li>
+      <li><strong>TP selection from extension indices</strong> — Uses array indices [0, 2, 4] regardless of how far apart the levels are. If extensions are clustered, TP1/TP2/TP3 can be very close together.</li>
+    </ul>
+  </div>
+</div>
+
+<!-- ────────────────── PRICE ACTION ────────────────── -->
+<h3 id="priceaction">1C. Price Action + Volume</h3>
+<div class="card">
+  <div class="method-header">
+    <div class="method-icon" style="background:rgba(34,197,94,0.15);">📊</div>
+    <div>
+      <strong style="font-size:1.1rem;">Price Action + Volume</strong><br>
+      <span style="color:var(--text-muted);font-size:0.85rem;">Timeframes: 1h · 4h · 1d &nbsp;|&nbsp; File: signal_priceaction.py</span>
+    </div>
+  </div>
+
+  <h4>Core Analysis Pipeline</h4>
+  <div class="flow-step"><div class="flow-num">1</div><div><strong>Swing detection</strong> — Window: <code>1h: 5</code>, <code>4h: 10</code>, <code>1d: 20</code>. Identifies swing highs and lows.</div></div>
+  <div class="flow-step"><div class="flow-num">2</div><div><strong>Trend via HH/HL/LH/LL</strong> — Last 4 swing highs + last 4 lows. Counts higher-highs + higher-lows vs lower-highs + lower-lows. Produces trend (UP/DOWN/RANGE) + strength (0–100%).</div></div>
+  <div class="flow-step"><div class="flow-num">3</div><div><strong>S/R clustering</strong> — Groups swing lows into support zones, swing highs into resistance zones. Cluster tolerance: 0.5%. Sorted by touch count (strongest first). Top 5 per side.</div></div>
+  <div class="flow-step"><div class="flow-num">4</div><div><strong>Volume analysis</strong> — Current volume vs 20-period average. Spike = ratio &ge; 2.0×.</div></div>
+
+  <h4>Signal Conditions</h4>
+  <div class="grid-2">
+    <div class="card card-alt">
+      <strong style="color:var(--green);">BUY Signal — All must be true:</strong>
+      <ol style="margin-top:0.5rem;">
+        <li>Trend = UPTREND</li>
+        <li>Nearest support exists below price</li>
+        <li>Price within 3% of nearest support</li>
+        <li>Computed R:R &ge; 2.0</li>
+      </ol>
+    </div>
+    <div class="card card-alt">
+      <strong style="color:var(--red);">SELL Signal — All must be true:</strong>
+      <ol style="margin-top:0.5rem;">
+        <li>Trend = DOWNTREND</li>
+        <li>Nearest resistance exists above price</li>
+        <li>Price within 3% of nearest resistance</li>
+        <li>Computed R:R &ge; 2.0</li>
+      </ol>
+    </div>
+  </div>
+
+  <h4>Trade Setup Derivation</h4>
+  <table>
+    <tr><th>Level</th><th>How Derived</th><th>Notes</th></tr>
+    <tr>
+      <td><span class="badge badge-cyan">ENTRY</span></td>
+      <td><strong>Nearest S/R cluster price</strong></td>
+      <td>BUY: nearest support level. SELL: nearest resistance level. These are limit-order entries (like SMC), often below/above current price.</td>
+    </tr>
+    <tr>
+      <td><span class="badge badge-red">STOP LOSS</span></td>
+      <td><strong>1.5 × ATR(14) beyond entry</strong></td>
+      <td>BUY: <code>support − 1.5 × ATR</code>. SELL: <code>resistance + 1.5 × ATR</code>. ATR = mean(high−low) over 14 candles. Volatility-adaptive.</td>
+    </tr>
+    <tr>
+      <td><span class="badge badge-green">TAKE PROFIT</span></td>
+      <td><strong>Nearest opposing S/R level</strong></td>
+      <td>BUY: nearest resistance. SELL: nearest support. Fallback: <code>entry × 1.05</code> or <code>entry × 0.95</code> (flat 5%). <strong>Single TP only.</strong></td>
+    </tr>
+  </table>
+
+  <h4>Confidence</h4>
+  <pre>confidence = min(80, 40 + trend_strength // 3 + (15 if volume_spike else 0))</pre>
+  <p>Range: 40–80. Base 40, up to +33 from trend strength, +15 for volume spike.</p>
+
+  <h4>Conviction</h4>
+  <table>
+    <tr><th>Tier</th><th>Conditions</th></tr>
+    <tr><td><span class="badge badge-green">HIGH</span></td><td><code>confidence &ge; 60</code> AND <code>R:R &ge; 2.0</code></td></tr>
+    <tr><td><span class="badge badge-yellow">LOW</span></td><td>Any valid trade setup not meeting HIGH</td></tr>
+    <tr><td><span class="badge badge-purple">STRONG</span></td><td>Upgraded when <code>confidence &ge; 65</code> AND <code>volume_spike = True</code></td></tr>
+  </table>
+
+  <div class="warn-box">
+    <strong>Audit flags for Price Action:</strong>
+    <ul style="margin-top:0.5rem;">
+      <li><strong>R:R &ge; 2.0 gate</strong> — This is a hard filter, which means PA only fires when setups look structurally good. This is probably the most reliable of the 3 methods for setup quality.</li>
+      <li><strong>5% fallback TP</strong> — When there's no opposing S/R level, TP defaults to a flat 5% from entry. This is somewhat arbitrary and can inflate R:R (since SL is ATR-based and likely smaller than 5%).</li>
+      <li><strong>S/R clustering at 0.5%</strong> — Tight tolerance. In a volatile market, meaningful S/R could be missed if levels don't cluster within 0.5%.</li>
+      <li><strong>"Within 3% of S/R" gate</strong> — This means price must be very near support/resistance. Good for quality but means many valid setups are skipped if price is even slightly far from S/R.</li>
+    </ul>
+  </div>
+</div>
+
+<!-- ────────────────── TECHNICAL ────────────────── -->
+<h3 id="technical">1D. Technical Analysis (Directional Only — No Trade Setups)</h3>
+<div class="card">
+  <div class="method-header">
+    <div class="method-icon" style="background:rgba(249,115,22,0.15);">📈</div>
+    <div>
+      <strong style="font-size:1.1rem;">Technical Analysis</strong><br>
+      <span style="color:var(--text-muted);font-size:0.85rem;">Timeframes: 15m · 1h · 4h · 1d &nbsp;|&nbsp; File: signal_technical.py</span>
+    </div>
+  </div>
+
+  <h4>8 Indicators → Composite Score</h4>
+  <table>
+    <tr><th>Indicator</th><th>Weight</th><th>Bullish Trigger</th><th>Bearish Trigger</th></tr>
+    <tr><td>RSI(14)</td><td>15</td><td>RSI &lt; 40 AND rising</td><td>RSI &gt; 60 AND falling</td></tr>
+    <tr><td>MACD(12,26,9)</td><td>20</td><td>Bullish crossover: +20, Above signal: +10</td><td>Bearish crossover: −20, Below signal: −10</td></tr>
+    <tr><td>SMA(20 vs 50)</td><td>15</td><td>SMA(20) &gt; SMA(50)</td><td>SMA(20) &lt; SMA(50)</td></tr>
+    <tr><td>Bollinger Bands(20,2)</td><td>10</td><td>BB%B &le; 0.05: +10, &le; 0.30: +5</td><td>BB%B &ge; 0.95: −10, &ge; 0.70: −5</td></tr>
+    <tr><td>Stoch RSI(14,3,3)</td><td>10</td><td>&lt; 20: +10, &lt; 35: +5</td><td>&gt; 80: −10, &gt; 65: −5</td></tr>
+    <tr><td>CCI(20)</td><td>10</td><td>&lt; −100: +10, &lt; −50: +5</td><td>&gt; 100: −10, &gt; 50: −5</td></tr>
+    <tr><td>Williams %R(14)</td><td>10</td><td>&lt; −80: +10, &lt; −60: +5</td><td>&gt; −20: −10, &gt; −40: −5</td></tr>
+    <tr><td>ADX(14)</td><td>10</td><td colspan="2">ADX &gt; 25: amplifies direction of cumulative score (+10 or −10)</td></tr>
+  </table>
+
+  <p><strong>Composite range:</strong> [−100, +100]. <strong>Signal:</strong> &ge; +40 → BUY, &le; −40 → SELL, else HOLD.</p>
+  <p><strong>Confidence:</strong> <code>min(100, abs(composite_score))</code></p>
+  <p><strong>Trend:</strong> Close &gt; SMA(200) AND SMA(20) &gt; SMA(50) → UPTREND. Below both → DOWNTREND. Else NEUTRAL.</p>
+  <p><strong>Conviction:</strong> HIGH if confidence &ge; 65 AND trend matches signal. LOW otherwise.</p>
+
+  <div class="info-box">
+    <strong>No trade setup levels.</strong> Technical produces no entry, SL, or TP. It's a pure directional signal. In the accuracy tracker, it uses the 5% threshold method for resolution (see Part 2B).
+  </div>
+</div>
+
+<!-- ────────────────── COMPARISON TABLE ────────────────── -->
+<h3 id="comparison">1E. Side-by-Side Comparison</h3>
+<div class="card" style="overflow-x:auto;">
+  <table>
+    <tr>
+      <th>Aspect</th>
+      <th><span class="badge badge-purple">SMC</span></th>
+      <th><span class="badge badge-cyan">Elliott</span></th>
+      <th><span class="badge badge-green">Price Action</span></th>
+      <th><span class="badge badge-orange">Technical</span></th>
+    </tr>
+    <tr>
+      <td><strong>Timeframes</strong></td>
+      <td>1h, 4h, 1d</td>
+      <td>1h, 4h, 1d</td>
+      <td>1h, 4h, 1d</td>
+      <td>15m, 1h, 4h, 1d</td>
+    </tr>
+    <tr>
+      <td><strong>Entry type</strong></td>
+      <td>Limit (OB price)</td>
+      <td>Market (current price)</td>
+      <td>Limit (S/R level)</td>
+      <td>None</td>
+    </tr>
+    <tr>
+      <td><strong>Stop loss basis</strong></td>
+      <td>Fixed 3% from entry</td>
+      <td>Nearest wave pivot</td>
+      <td>1.5× ATR(14) from entry</td>
+      <td>None</td>
+    </tr>
+    <tr>
+      <td><strong>TP count</strong></td>
+      <td>1</td>
+      <td>Up to 3 (labeled)</td>
+      <td>1</td>
+      <td>0</td>
+    </tr>
+    <tr>
+      <td><strong>TP source</strong></td>
+      <td>Opposing OB / liquidity</td>
+      <td>Fib extensions or retracements</td>
+      <td>Opposing S/R (or 5% flat)</td>
+      <td>N/A</td>
+    </tr>
+    <tr>
+      <td><strong>Confidence range</strong></td>
+      <td>0–100</td>
+      <td>25–70 (hard cap)</td>
+      <td>40–80 (capped)</td>
+      <td>0–100</td>
+    </tr>
+    <tr>
+      <td><strong>HIGH conviction</strong></td>
+      <td>conf &ge; 67 + R:R &ge; 2 + trend</td>
+      <td>R:R &ge; 2 + stop &ge; 1.5% + W2/W4 + rules + conf &ge; 50</td>
+      <td>conf &ge; 60 + R:R &ge; 2</td>
+      <td>conf &ge; 65 + trend</td>
+    </tr>
+    <tr>
+      <td><strong>STRONG upgrade</strong></td>
+      <td>conf &ge; 75</td>
+      <td>conf &ge; 55 + rules_valid</td>
+      <td>conf &ge; 65 + volume spike</td>
+      <td>|score| &ge; 65</td>
+    </tr>
+    <tr>
+      <td><strong>Signal gate</strong></td>
+      <td>Score &ge; 50</td>
+      <td>Wave position + direction</td>
+      <td>R:R &ge; 2.0 + within 3% S/R</td>
+      <td>|composite| &ge; 40</td>
+    </tr>
+    <tr>
+      <td><strong>Resolution method</strong></td>
+      <td>SL/TP hit</td>
+      <td>SL/TP hit</td>
+      <td>SL/TP hit</td>
+      <td>5% threshold</td>
+    </tr>
+  </table>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════ PART 2 ═══════════════════════════════════════════ -->
+<h2 id="part2">Part 2 — Signal Accuracy Tracking</h2>
+<p>Signals are recorded into <code>signal_tracker</code> for accuracy measurement. The alert worker runs every 5 minutes: first resolves pending signals, then generates new ones.</p>
+
+<!-- ────────────────── RECORDING ────────────────── -->
+<h3 id="recording">2A. Recording Signals</h3>
+<div class="card">
+  <h4>Pipeline: Signal → Database</h4>
+  <div class="flow-step"><div class="flow-num">1</div><div><strong>Skip HOLD signals</strong> — Only BUY/SELL get tracked.</div></div>
+  <div class="flow-step"><div class="flow-num">2</div><div><strong>Confidence gate:</strong> <code>confidence &ge; 50</code> required (constant <code>TRACKING_MIN_CONFIDENCE</code>).</div></div>
+  <div class="flow-step"><div class="flow-num">3</div><div><strong>Classify signal</strong> — Upgrade to STRONG_BUY / STRONG_SELL if thresholds met. Must produce non-null classification.</div></div>
+  <div class="flow-step"><div class="flow-num">4</div><div><strong>Per-timeframe dedup</strong> — Checks for an identical (symbol + methodology + timeframe + signal) within the dedup window:</div></div>
+  <table>
+    <tr><th>Timeframe</th><th>Dedup Window</th><th>Rationale</th></tr>
+    <tr><td>15m</td><td>900s (15 min)</td><td>Prevents re-recording within the candle period</td></tr>
+    <tr><td>1h</td><td>3,600s (1 hr)</td><td>One signal per hour candle</td></tr>
+    <tr><td>4h</td><td>14,400s (4 hrs)</td><td>One signal per 4h candle</td></tr>
+    <tr><td>1d</td><td>86,400s (24 hrs)</td><td>One signal per day — was the main fix for 1d duplicating 14×/day</td></tr>
+  </table>
+
+  <div class="flow-step"><div class="flow-num">5</div><div><strong>Price validation:</strong> <code>price &gt; 0</code>.</div></div>
+  <div class="flow-step"><div class="flow-num">6</div><div><strong>Quality gates</strong> (non-technical methods only, when entry + SL exist):</div></div>
+
+  <div class="card card-alt" style="margin-left:2.5rem;">
+    <table>
+      <tr><th>Gate</th><th>Condition</th><th>Why</th></tr>
+      <tr>
+        <td><span class="badge badge-red">Entry = SL</span></td>
+        <td><code>|entry − SL| &lt; 0.00001</code></td>
+        <td>Nonsensical setup — zero risk distance</td>
+      </tr>
+      <tr>
+        <td><span class="badge badge-red">Stale entry</span></td>
+        <td><code>|entry − price| / price &gt; 20%</code></td>
+        <td>Order block too far from market — stale structure</td>
+      </tr>
+      <tr>
+        <td><span class="badge badge-red">Bad R:R</span></td>
+        <td><code>R:R &lt; 1.0</code> (when TP exists)</td>
+        <td>Not a tradeable setup — more risk than reward</td>
+      </tr>
+    </table>
+    <p style="margin-top:0.5rem;color:var(--text-muted);font-size:0.85rem;">Technical signals are exempt from all quality gates (they have no entry/SL/TP).</p>
+  </div>
+
+  <div class="flow-step"><div class="flow-num">7</div><div><strong>Set resolve_after</strong> — <code>now + timeframe_duration</code> (15m/1h/4h/24h). This is the <em>earliest</em> the resolver will look at the signal.</div></div>
+  <div class="flow-step"><div class="flow-num">8</div><div><strong>Insert to signal_tracker</strong> with <code>outcome = "PENDING"</code>.</div></div>
+
+  <h4>Database Schema</h4>
+  <pre>signal_tracker
+├── id              UUID (PK)
+├── symbol          TEXT           -- "BTC", "ETH", etc.
+├── methodology     TEXT           -- "technical", "smc", "elliott", "priceaction"
+├── timeframe       TEXT           -- "15m", "1h", "4h", "1d"
+├── signal          TEXT           -- "BUY", "STRONG_BUY", "SELL", "STRONG_SELL"
+├── confidence      INT            -- 0-100
+├── conviction      TEXT           -- "HIGH", "LOW", or NULL
+├── price_at_signal NUMERIC        -- market price when signal was generated
+├── entry_price     NUMERIC (null) -- suggested entry (limit for SMC/PA, market for Elliott)
+├── stop_loss       NUMERIC (null) -- null for technical
+├── take_profit     NUMERIC (null) -- TP1 only (null for technical)
+├── signal_data     JSONB          -- full output blob from signal module
+├── signal_time     TIMESTAMPTZ    -- when recorded
+├── resolve_after   TIMESTAMPTZ    -- earliest resolution eligibility
+├── resolved_at     TIMESTAMPTZ    -- when outcome was determined
+├── resolved_price  NUMERIC        -- price at resolution
+├── outcome         TEXT           -- "PENDING", "WIN", "LOSS", "NEUTRAL"
+└── price_change_pct NUMERIC       -- % change from entry to resolved price</pre>
+</div>
+
+<!-- ────────────────── RESOLUTION ────────────────── -->
+<h3 id="resolution">2B. Resolving Signals (WIN / LOSS / NEUTRAL)</h3>
+<div class="card">
+  <p>Runs at the top of every 5-minute cycle. Fetches all PENDING signals past their <code>resolve_after</code> time, gets current Coinbase prices, then applies methodology-specific resolution.</p>
+
+  <h4>Resolution Path 1: Technical (or any signal missing SL/TP)</h4>
+  <div class="card card-alt">
+    <p>Uses a <strong>flat 5% threshold</strong> from entry price (which = price_at_signal for technical):</p>
+    <table>
+      <tr><th>Direction</th><th>WIN</th><th>LOSS</th><th>NEUTRAL</th></tr>
+      <tr><td>BUY / STRONG_BUY</td><td>Price rose &ge; 5% from entry</td><td>Price fell &ge; 5% from entry</td><td>14 days elapsed, neither hit</td></tr>
+      <tr><td>SELL / STRONG_SELL</td><td>Price fell &ge; 5% from entry</td><td>Price rose &ge; 5% from entry</td><td>14 days elapsed, neither hit</td></tr>
+    </table>
+    <p style="margin-top:0.5rem;">If neither threshold is hit and &lt; 14 days have passed → stays <strong>PENDING</strong> (checked again next cycle).</p>
+  </div>
+
+  <h4>Resolution Path 2: SMC / Elliott / Price Action (with SL and TP)</h4>
+  <div class="card card-alt">
+    <p>Holds the signal open until price hits the actual stop loss or take profit level:</p>
+    <table>
+      <tr><th>Direction</th><th>WIN</th><th>LOSS</th><th>NEUTRAL</th></tr>
+      <tr><td>BUY / STRONG_BUY</td><td><code>current_price &ge; take_profit</code></td><td><code>current_price &le; stop_loss</code></td><td>14 days elapsed</td></tr>
+      <tr><td>SELL / STRONG_SELL</td><td><code>current_price &le; take_profit</code></td><td><code>current_price &ge; stop_loss</code></td><td>14 days elapsed</td></tr>
+    </table>
+    <p style="margin-top:0.5rem;">If neither SL nor TP hit and &lt; 14 days → stays <strong>PENDING</strong>.</p>
+  </div>
+
+  <h4>Entry Reachability Check</h4>
+  <div class="card card-alt">
+    <p>For limit-order-style entries (SMC, Price Action) where entry differs from signal price by &gt; 1%:</p>
+    <p>If the entry hasn't been "reached" by price, the signal stays PENDING regardless of SL/TP. Example: SMC gives BUY with entry at $90K (OB level) but current price is $95K. The signal waits until price drops to ~$90K, or 14 days pass (→ NEUTRAL).</p>
+    <pre>entry_unreachable = (is_buy AND current > entry AND signal_price > entry)
+                  OR (is_sell AND current < entry AND signal_price < entry)
+
+if entry_unreachable AND age < 14 days:
+    skip (keep PENDING)</pre>
+  </div>
+
+  <h4>P&L Calculation</h4>
+  <pre>price_change_pct = ((current_price - entry_price) / entry_price) × 100</pre>
+  <p>Always from <strong>entry_price</strong>, not signal price. This is a raw directional number — positive means price went up, negative means down. For SELL signals, a negative <code>price_change_pct</code> is actually profitable (but the column doesn't flip the sign).</p>
+
+  <div class="warn-box">
+    <strong>Critical resolution issues to audit:</strong>
+    <ul style="margin-top:0.5rem;">
+      <li><strong>Spot-check only (every 5 min)</strong> — The resolver checks the <em>current</em> price. If price spiked through TP <em>and</em> reversed through SL between two checks, the resolution depends on where price is when the check runs. Intraday wicks could hit SL/TP and reverse before the 5-min check sees it. This is especially problematic on 15m/1h timeframes.</li>
+      <li><strong>Only TP1 is tracked</strong> — SMC and PA have a single TP. Elliott has 3 TPs but only TP1 is stored in the <code>take_profit</code> column. Resolution is based on TP1 only. If price reaches TP2/TP3 but not TP1 (shouldn't happen geometrically but worth noting).</li>
+      <li><strong>price_change_pct for SELL signals is misleading</strong> — A winning SELL will have a <em>negative</em> price_change_pct (price fell). The <code>avg_return_pct</code> stat doesn't flip the sign for sells, so winning shorts drag the average return down even though they're profitable trades.</li>
+      <li><strong>NEUTRAL at 14 days</strong> — Signals that never hit SL or TP become NEUTRAL. If a large fraction end up NEUTRAL, the win rate calculation (<code>wins / resolved</code>) could be misleadingly high because near-losses are excluded as neutral.</li>
+      <li><strong>Entry reachability is one-directional</strong> — It checks if price is on the "wrong side" of the entry. But it doesn't verify price actually <em>touched</em> the entry level — it just checks if current price is beyond entry. If price gaps through, it's considered "reached."</li>
+    </ul>
+  </div>
+</div>
+
+<!-- ────────────────── STATS ────────────────── -->
+<h3 id="stats">2C. Accuracy Stats Aggregation</h3>
+<div class="card">
+  <h4>Endpoint: <code>GET /api/signals/accuracy</code></h4>
+  <p>Params: <code>methodology</code> (optional), <code>timeframe</code> (optional), <code>days</code> (default 30)</p>
+
+  <h4>What's computed:</h4>
+  <table>
+    <tr><th>Metric</th><th>Formula</th><th>Notes</th></tr>
+    <tr><td>Win Rate</td><td><code>wins / resolved × 100</code></td><td>NEUTRAL counts as resolved but is neither win nor loss</td></tr>
+    <tr><td>Avg Return %</td><td>Mean of <code>price_change_pct</code> across all resolved</td><td>Doesn't flip sign for sells — see warning above</td></tr>
+    <tr><td>By Methodology</td><td>Same metrics grouped by method</td><td>Good for comparing method quality</td></tr>
+    <tr><td>By Signal Type</td><td>BUY / STRONG_BUY / SELL / STRONG_SELL breakdown</td><td>Shows if STRONG signals are actually better</td></tr>
+    <tr><td>By Conviction</td><td>HIGH / LOW / NONE breakdown</td><td>Key question: does HIGH conviction actually predict wins?</td></tr>
+  </table>
+
+  <h4>Conviction fallback logic</h4>
+  <pre>conviction = row["conviction"]                          # top-level column
+           or row["signal_data"]["conviction"]             # JSONB fallback
+           or "NONE"                                       # default</pre>
+  <p>This handles older rows that may have conviction only in the JSONB blob, not the dedicated column.</p>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════ PART 3 ═══════════════════════════════════════════ -->
+<h2 id="part3">Part 3 — Known Gaps & Audit Checklist</h2>
+
+<div class="card">
+  <h4>A. Signal Generation Gaps</h4>
+  <table>
+    <tr><th>#</th><th>Issue</th><th>Impact</th><th>Severity</th></tr>
+    <tr>
+      <td>1</td>
+      <td><strong>SMC: Fixed 3% stop loss</strong> — Not adaptive to coin volatility or ATR</td>
+      <td>Stops too tight on volatile coins, too loose on stable ones. Distorts R:R.</td>
+      <td><span class="badge badge-orange">MEDIUM</span></td>
+    </tr>
+    <tr>
+      <td>2</td>
+      <td><strong>Elliott: Entry = current price</strong> — Always at-market, never a pullback level</td>
+      <td>Entry reachability check always passes. No "limit order" behavior like SMC/PA.</td>
+      <td><span class="badge badge-yellow">LOW</span></td>
+    </tr>
+    <tr>
+      <td>3</td>
+      <td><strong>PA: 5% fallback TP</strong> — When no opposing S/R exists</td>
+      <td>Arbitrary target that can inflate R:R when actual structure is absent.</td>
+      <td><span class="badge badge-yellow">LOW</span></td>
+    </tr>
+    <tr>
+      <td>4</td>
+      <td><strong>Only TP1 stored</strong> — Elliott's TP2/TP3 exist in signal_data JSONB but aren't in the top-level column</td>
+      <td>Resolution only checks TP1. Can't track partial TP accuracy.</td>
+      <td><span class="badge badge-yellow">LOW</span></td>
+    </tr>
+    <tr>
+      <td>5</td>
+      <td><strong>SMC "near OB" at 3%</strong> — Generous proximity threshold</td>
+      <td>Signals fire when price may never actually retrace to the OB entry level.</td>
+      <td><span class="badge badge-yellow">LOW</span></td>
+    </tr>
+  </table>
+</div>
+
+<div class="card">
+  <h4>B. Signal Accuracy Tracking Gaps</h4>
+  <table>
+    <tr><th>#</th><th>Issue</th><th>Impact</th><th>Severity</th></tr>
+    <tr>
+      <td>6</td>
+      <td><strong>5-min spot-check resolution</strong> — Only checks current price, not candle highs/lows between checks</td>
+      <td>Can miss SL/TP hits that occur intrabar. Signal might show WIN when SL was hit first (or vice versa), especially on shorter timeframes.</td>
+      <td><span class="badge badge-red">HIGH</span></td>
+    </tr>
+    <tr>
+      <td>7</td>
+      <td><strong>SELL P&L sign not flipped</strong> — <code>price_change_pct</code> is always (current−entry)/entry</td>
+      <td>Winning SELL signals show negative returns. <code>avg_return_pct</code> is unreliable when mixing BUY and SELL signals.</td>
+      <td><span class="badge badge-red">HIGH</span></td>
+    </tr>
+    <tr>
+      <td>8</td>
+      <td><strong>NEUTRAL inflates perceived win rate</strong> — Win rate = wins/(wins+losses+neutrals)</td>
+      <td>If many signals time out as NEUTRAL, the denominator grows without adding losses, making win rate look better than actual W/L ratio.</td>
+      <td><span class="badge badge-orange">MEDIUM</span></td>
+    </tr>
+    <tr>
+      <td>9</td>
+      <td><strong>Entry reachability doesn't confirm touch</strong> — Only checks if price is "beyond" entry</td>
+      <td>A gap through the entry level counts as "reached." For limit-order entries (SMC/PA), this may not reflect reality.</td>
+      <td><span class="badge badge-yellow">LOW</span></td>
+    </tr>
+    <tr>
+      <td>10</td>
+      <td><strong>No SL-first vs TP-first tracking</strong> — When both are hit in the same check window</td>
+      <td>If price hits SL then bounces to TP between checks, we might record WIN (current price at TP). No way to know SL was hit first.</td>
+      <td><span class="badge badge-orange">MEDIUM</span></td>
+    </tr>
+    <tr>
+      <td>11</td>
+      <td><strong>Technical 5% threshold is one-size-fits-all</strong> — Same threshold regardless of coin volatility</td>
+      <td>5% is easily hit on volatile coins (SOL, SUI) but hard on stable ones (BTC, ETH). Creates bias toward more volatile coins showing more wins AND losses.</td>
+      <td><span class="badge badge-orange">MEDIUM</span></td>
+    </tr>
+  </table>
+</div>
+
+<div class="card">
+  <h4>C. Audit Checklist</h4>
+  <p>Use this to systematically verify signal accuracy data is reliable:</p>
+  <table>
+    <tr><th>Check</th><th>How to Verify</th><th>What to Look For</th></tr>
+    <tr>
+      <td>SELL return signs</td>
+      <td>Filter tracker for SELL WINs. Check if <code>price_change_pct</code> is negative.</td>
+      <td>All winning SELLs should have negative %. If so, <code>avg_return_pct</code> is being dragged down by correct behavior. Fix: flip sign for sells in aggregation.</td>
+    </tr>
+    <tr>
+      <td>NEUTRAL ratio</td>
+      <td>Check <code>neutral / resolved</code> ratio overall and per method.</td>
+      <td>If &gt; 30% NEUTRAL, the 14-day timeout is resolving too many signals. May need longer hold or different resolution logic.</td>
+    </tr>
+    <tr>
+      <td>Entry reachability</td>
+      <td>Filter for SMC/PA signals where <code>entry_price</code> differs from <code>price_at_signal</code> by &gt; 5%.</td>
+      <td>These are limit-order entries. Check how many resolved as WIN/LOSS without price ever touching entry. May need candle-range verification.</td>
+    </tr>
+    <tr>
+      <td>SL/TP miss from spot-check</td>
+      <td>Look at resolved signals where <code>resolved_price</code> is between SL and TP (not at either level).</td>
+      <td>If <code>outcome = WIN</code> but resolved_price &lt; TP (or LOSS but resolved_price &gt; SL), the spot-check may have caught a temporary spike.</td>
+    </tr>
+    <tr>
+      <td>R:R consistency</td>
+      <td>Compare R:R from frontend (client-computed) vs what quality gates checked at recording time.</td>
+      <td>Should match. If TP or SL changed between recording and display, there's a data integrity issue.</td>
+    </tr>
+    <tr>
+      <td>Conviction predictiveness</td>
+      <td>Compare HIGH vs LOW win rates per method.</td>
+      <td>If HIGH doesn't meaningfully outperform LOW, the conviction logic isn't adding value and may need recalibration.</td>
+    </tr>
+    <tr>
+      <td>Duplicate signals</td>
+      <td>Look for same symbol + method + timeframe + signal within dedup window.</td>
+      <td>Should be zero after the per-TF dedup fix. If any exist, dedup logic has a bug.</td>
+    </tr>
+  </table>
+</div>
+
+<div class="card">
+  <h4>D. Recommended Fixes (Priority Order)</h4>
+  <ol>
+    <li style="margin-bottom:1rem;">
+      <strong>Fix SELL P&L sign</strong> <span class="badge badge-red">HIGH</span><br>
+      In <code>resolve_signals()</code> and/or <code>/api/signals/accuracy</code>, flip <code>price_change_pct</code> for SELL signals so that a profitable short shows a positive return. This makes <code>avg_return_pct</code> meaningful across both directions.
+    </li>
+    <li style="margin-bottom:1rem;">
+      <strong>Add candle high/low checking to resolution</strong> <span class="badge badge-red">HIGH</span><br>
+      Instead of just checking <code>current_price</code>, fetch the candle range (high/low) since the last check. If the candle low &le; SL, that's a LOSS — even if current price recovered. If candle high &ge; TP, that's a WIN. For ambiguous cases (both hit), use whichever was closer to the open (approximation of "which hit first").
+    </li>
+    <li style="margin-bottom:1rem;">
+      <strong>SMC: ATR-based stop loss</strong> <span class="badge badge-orange">MEDIUM</span><br>
+      Replace fixed 3% stop with <code>entry ± 1.5× ATR(14)</code> (matching Price Action). This adapts to each coin's volatility and produces more meaningful R:R.
+    </li>
+    <li style="margin-bottom:1rem;">
+      <strong>Report W/L ratio alongside win rate</strong> <span class="badge badge-orange">MEDIUM</span><br>
+      Add <code>wins / (wins + losses)</code> as a separate metric that excludes NEUTRALs. Show both to understand true predictive accuracy vs the timeout-adjusted rate.
+    </li>
+    <li style="margin-bottom:1rem;">
+      <strong>ATR-scaled technical threshold</strong> <span class="badge badge-orange">MEDIUM</span><br>
+      Replace fixed 5% technical resolution threshold with <code>3 × ATR(14) / price × 100</code>. This normalizes resolution to each coin's volatility.
+    </li>
+  </ol>
+</div>
+
+<!-- FOOTER -->
+<div class="divider"></div>
+<p style="color:var(--text-muted);font-size:0.8rem;text-align:center;">
+  Generated March 2026 · Source: <code>signal_smc.py</code> · <code>signal_elliott.py</code> · <code>signal_priceaction.py</code> · <code>signal_technical.py</code> · <code>alert_worker.py</code>
+</p>
+
+</div>
+</body>
+</html>

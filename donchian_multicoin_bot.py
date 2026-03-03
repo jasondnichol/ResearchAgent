@@ -34,16 +34,15 @@ from notify import send_telegram, send_telegram_user, send_telegram_platform, se
 from supabase_sync import SupabaseSync
 
 # ============================================================================
-# CONFIGURATION
+# DEFAULT CONFIGURATION (immutable module-level defaults, never mutated at runtime)
 # ============================================================================
 
-COIN_UNIVERSE = [
+DEFAULT_COIN_UNIVERSE = [
     'BTC-USD', 'ETH-USD', 'SOL-USD', 'XRP-USD',
     'SUI-USD', 'LINK-USD', 'ADA-USD', 'NEAR-USD',
 ]
 
-# Strategy parameters (matches backtest DEFAULT_PARAMS)
-STRATEGY_PARAMS = {
+DEFAULT_STRATEGY_PARAMS = {
     'donchian_period': 20,
     'exit_period': 10,
     'atr_period': 14,
@@ -60,69 +59,55 @@ STRATEGY_PARAMS = {
     'lookback': 60,
 }
 
-# Portfolio settings
-MAX_POSITIONS = 4
-RISK_PER_TRADE_PCT = 2.0  # risk 2% of equity per trade
-STARTING_CAPITAL = 10000.0  # paper trading starting balance
-EMERGENCY_STOP_PCT = 15.0  # emergency stop 15% below entry
+DEFAULT_MAX_POSITIONS = 4
+DEFAULT_RISK_PER_TRADE_PCT = 2.0
+DEFAULT_STARTING_CAPITAL = 10000.0
+DEFAULT_EMERGENCY_STOP_PCT = 15.0
+DEFAULT_PYRAMID_ENABLED = True
+DEFAULT_PYRAMID_GAIN_PCT = 15.0
+DEFAULT_PYRAMID_RISK_PCT = 1.0
 
-# Pyramiding (add to winners)
-PYRAMID_ENABLED = True
-PYRAMID_GAIN_PCT = 15.0    # add to winner when position is up +15%
-PYRAMID_RISK_PCT = 1.0     # 1% equity risk on the add-on tranche
+BULL_SMA_FAST = 50
+BULL_SMA_SLOW = 200
+BULL_LOOKBACK = 220
 
-# Bull market filter (BTC macro gate) — default, overridden by Supabase config
-BULL_FILTER_ENABLED = True
-BULL_SMA_FAST = 50   # SMA(50) — still computed for display/bear filter, not used in bull gate
-BULL_SMA_SLOW = 200  # BTC close must be above SMA(200)
-# NOTE: Bull filter relaxed to price > SMA(200) only (no golden cross).
-# Dead zone analysis showed golden cross requirement blocked profitable longs (PF 4.54, 70.8% WR).
-BULL_LOOKBACK = 220  # candles to fetch for SMA(200) computation
-
-# Short-side strategy parameters (from backtest_shorts.py death cross best: L10_A2.0_E15_V2.0)
-SHORT_STRATEGY_PARAMS = {
-    'donchian_period': 10,       # N-day low for breakdown entry
-    'exit_period': 15,           # N-day high for short cover exit
+DEFAULT_SHORT_STRATEGY_PARAMS = {
+    'donchian_period': 10,
+    'exit_period': 15,
     'atr_period': 14,
-    'atr_mult': 2.0,             # 2x ATR trailing (tighter than long's 4x)
-    'volume_mult': 2.0,          # volume > 2x avg
-    'ema_period': 21,            # price must be below EMA(21)
-    'rsi_blowoff': 20,           # bounce risk: RSI < 20 (inverted from long's 80)
+    'atr_mult': 2.0,
+    'volume_mult': 2.0,
+    'ema_period': 21,
+    'rsi_blowoff': 20,
     'volume_blowoff': 3.0,
-    'atr_mult_tight': 1.0,       # tightened stop on bounce
-    'tp1_pct': 10.0,             # partial TP at -10% price drop
-    'tp2_pct': 20.0,             # partial TP at -20% price drop
+    'atr_mult_tight': 1.0,
+    'tp1_pct': 10.0,
+    'tp2_pct': 20.0,
     'tp1_fraction': 0.25,
     'tp2_fraction': 0.25,
     'lookback': 60,
 }
 
-# Short-eligible coin universe (perp-only; NEAR has no liquid perp, use DOGE)
-SHORT_COIN_UNIVERSE = [
+DEFAULT_SHORT_COIN_UNIVERSE = [
     'BTC-USD', 'ETH-USD', 'SOL-USD', 'XRP-USD',
     'SUI-USD', 'LINK-USD', 'ADA-USD', 'DOGE-USD',
 ]
 
-SHORT_RISK_PER_TRADE_PCT = 2.0
-SHORT_EMERGENCY_STOP_PCT = 15.0   # exit if price rises 15% above entry
-SHORT_MAX_HOLD_DAYS = 30          # forced exit after 30 days
+DEFAULT_SHORT_RISK_PER_TRADE_PCT = 2.0
+DEFAULT_SHORT_EMERGENCY_STOP_PCT = 15.0
+DEFAULT_SHORT_MAX_HOLD_DAYS = 30
+DEFAULT_SHORT_PYRAMID_ENABLED = False
+DEFAULT_BEAR_FILTER_ENABLED = True
 
-# Short pyramiding (disabled initially — enable after validation)
-SHORT_PYRAMID_ENABLED = False
+DEFAULT_FUTURES_LONG_ENABLED = False
+DEFAULT_FUTURES_LONG_LEVERAGE = 1.0
 
-# Bear market filter (death cross) — default, overridden by Supabase config
-BEAR_FILTER_ENABLED = True
-
-# Futures Long config — same Donchian breakout logic as spot longs, executed via CFM perps
-FUTURES_LONG_ENABLED = False     # default off, user opts in via dashboard
-FUTURES_LONG_LEVERAGE = 1.0      # start at 1x, configurable 1-3x via dashboard
-
-FUTURES_LONG_COIN_UNIVERSE = [
+DEFAULT_FUTURES_LONG_COIN_UNIVERSE = [
     'BTC-USD', 'ETH-USD', 'SOL-USD', 'XRP-USD',
     'SUI-USD', 'LINK-USD', 'ADA-USD', 'DOGE-USD',
 ]
 
-FUTURES_LONG_STRATEGY_PARAMS = {
+DEFAULT_FUTURES_LONG_STRATEGY_PARAMS = {
     'donchian_period': 20,
     'exit_period': 10,
     'atr_period': 14,
@@ -139,73 +124,98 @@ FUTURES_LONG_STRATEGY_PARAMS = {
     'lookback': 60,
 }
 
-FUTURES_LONG_RISK_PER_TRADE_PCT = 2.0
-FUTURES_LONG_EMERGENCY_STOP_PCT = 15.0
-FUTURES_LONG_PYRAMID_ENABLED = True
-FUTURES_LONG_PYRAMID_GAIN_PCT = 15.0
-FUTURES_LONG_PYRAMID_RISK_PCT = 1.0
+DEFAULT_FUTURES_LONG_RISK_PER_TRADE_PCT = 2.0
+DEFAULT_FUTURES_LONG_EMERGENCY_STOP_PCT = 15.0
+DEFAULT_FUTURES_LONG_PYRAMID_ENABLED = True
+DEFAULT_FUTURES_LONG_PYRAMID_GAIN_PCT = 15.0
+DEFAULT_FUTURES_LONG_PYRAMID_RISK_PCT = 1.0
 
-# Timing
-DAILY_CHECK_HOUR = 0      # UTC hour for daily signal check
-DAILY_CHECK_MINUTE = 15   # UTC minute (15 min after candle close)
-STOP_CHECK_INTERVAL = 1800  # 30 minutes between trailing stop checks
-
-STATE_FILE = 'bot_state.json'
+# Timing (shared across all users — not per-user configurable)
+DAILY_CHECK_HOUR = 0
+DAILY_CHECK_MINUTE = 15
+STOP_CHECK_INTERVAL = 1800
 
 
 # ============================================================================
 # BOT CLASS
 # ============================================================================
 
-class DonchianMultiCoinBot:
-    def __init__(self, paper_trading=True):
+class UserBot:
+    """Per-user trading bot instance. All config is instance-scoped (no global mutation)."""
+
+    def __init__(self, user_id, paper_trading=True):
+        self.user_id = user_id
         self.paper_trading = paper_trading
         self.coinbase_api = "https://api.exchange.coinbase.com"
 
+        # Copy defaults into instance vars (never mutate module-level constants)
+        self.strategy_params = dict(DEFAULT_STRATEGY_PARAMS)
+        self.coin_universe = list(DEFAULT_COIN_UNIVERSE)
+        self.short_strategy_params = dict(DEFAULT_SHORT_STRATEGY_PARAMS)
+        self.short_coin_universe = list(DEFAULT_SHORT_COIN_UNIVERSE)
+        self.futures_long_strategy_params = dict(DEFAULT_FUTURES_LONG_STRATEGY_PARAMS)
+        self.futures_long_coin_universe = list(DEFAULT_FUTURES_LONG_COIN_UNIVERSE)
+
+        self.max_positions = DEFAULT_MAX_POSITIONS
+        self.risk_per_trade_pct = DEFAULT_RISK_PER_TRADE_PCT
+        self.starting_capital = DEFAULT_STARTING_CAPITAL
+        self.emergency_stop_pct = DEFAULT_EMERGENCY_STOP_PCT
+        self.pyramid_enabled = DEFAULT_PYRAMID_ENABLED
+        self.pyramid_gain_pct = DEFAULT_PYRAMID_GAIN_PCT
+        self.pyramid_risk_pct = DEFAULT_PYRAMID_RISK_PCT
+
+        self.short_risk_per_trade_pct = DEFAULT_SHORT_RISK_PER_TRADE_PCT
+        self.short_emergency_stop_pct = DEFAULT_SHORT_EMERGENCY_STOP_PCT
+        self.short_max_hold_days = DEFAULT_SHORT_MAX_HOLD_DAYS
+        self.short_pyramid_enabled = DEFAULT_SHORT_PYRAMID_ENABLED
+
+        self.futures_long_risk_per_trade_pct = DEFAULT_FUTURES_LONG_RISK_PER_TRADE_PCT
+        self.futures_long_emergency_stop_pct = DEFAULT_FUTURES_LONG_EMERGENCY_STOP_PCT
+        self.futures_long_pyramid_enabled = DEFAULT_FUTURES_LONG_PYRAMID_ENABLED
+        self.futures_long_pyramid_gain_pct = DEFAULT_FUTURES_LONG_PYRAMID_GAIN_PCT
+        self.futures_long_pyramid_risk_pct = DEFAULT_FUTURES_LONG_PYRAMID_RISK_PCT
+
+        self.state_file = f'bot_state_{user_id[:8]}.json'
+
         # Portfolio state
-        self.cash = STARTING_CAPITAL
-        self.positions = {}  # symbol -> position dict
+        self.cash = self.starting_capital
+        self.positions = {}
         self.trades_log = []
         self.total_realized_pnl = 0.0
 
-        # Strategy instances (one per coin for longs)
-        self.strategies = {}
-        for symbol in COIN_UNIVERSE:
-            self.strategies[symbol] = DonchianBreakoutStrategy(STRATEGY_PARAMS)
+        # Strategy instances
+        self.strategies = {sym: DonchianBreakoutStrategy(self.strategy_params) for sym in self.coin_universe}
+        self.short_strategies = {sym: DonchianBreakoutStrategy(self.short_strategy_params) for sym in self.short_coin_universe}
+        self.futures_long_strategies = {sym: DonchianBreakoutStrategy(self.futures_long_strategy_params) for sym in self.futures_long_coin_universe}
 
-        # Short strategy instances (separate params for shorts)
-        self.short_strategies = {}
-        for symbol in SHORT_COIN_UNIVERSE:
-            self.short_strategies[symbol] = DonchianBreakoutStrategy(SHORT_STRATEGY_PARAMS)
-
-        # Futures Long strategy instances (same signal logic as spot, but via perps)
-        self.futures_long_strategies = {}
-        for symbol in FUTURES_LONG_COIN_UNIVERSE:
-            self.futures_long_strategies[symbol] = DonchianBreakoutStrategy(FUTURES_LONG_STRATEGY_PARAMS)
-
-        # Futures client (for short + futures long positions via Coinbase CFM perps)
+        # Futures client
         self.futures_client = CoinbaseFuturesClient(paper_mode=paper_trading)
 
         # Logging
         self.logger, self.trade_logger = setup_logging()
 
-        # Supabase sync (fire-and-forget, never crashes the bot)
-        self.sync = SupabaseSync()
+        # Supabase sync
+        self.sync = SupabaseSync(user_id=user_id)
 
-        # Bull filter — default from constant, overridden by Supabase config
-        self.bull_filter_enabled = BULL_FILTER_ENABLED
-        # Bear filter (death cross) — gates short entries
-        self.bear_filter_enabled = BEAR_FILTER_ENABLED
-        # Short master toggle — can disable shorts independently of bear filter
+        # Mode toggles
+        self.bull_filter_enabled = True
+        self.bear_filter_enabled = DEFAULT_BEAR_FILTER_ENABLED
         self.short_enabled = True
-        # Futures Long — default from constant, overridden by Supabase config
-        self.futures_long_enabled = FUTURES_LONG_ENABLED
-        self.futures_long_leverage = FUTURES_LONG_LEVERAGE
-        # Per-user Telegram (loaded from Supabase, falls back to .env)
+        self.futures_long_enabled = DEFAULT_FUTURES_LONG_ENABLED
+        self.futures_long_leverage = DEFAULT_FUTURES_LONG_LEVERAGE
+
+        # Per-user Telegram
         self.telegram_bot_token = ""
         self.telegram_chat_id = ""
         self.notify_telegram = True
         self.load_remote_config()
+
+        # Enforce paper trading if not live mode
+        if not self.paper_trading:
+            # Double-check: only admin-approved users can go live
+            config = self.sync.load_config()
+            if config and config.get("trading_mode") != "live":
+                self.paper_trading = True
 
         # Load saved state if exists
         self.load_state()
@@ -215,36 +225,26 @@ class DonchianMultiCoinBot:
     # ------------------------------------------------------------------
 
     def load_remote_config(self):
-        """Load full strategy config from Supabase. Updates all strategy params,
-        risk settings, coin lists, and mode toggles. Falls back to local defaults
-        if Supabase is unavailable."""
-        global MAX_POSITIONS, RISK_PER_TRADE_PCT, EMERGENCY_STOP_PCT
-        global PYRAMID_ENABLED, PYRAMID_GAIN_PCT, PYRAMID_RISK_PCT
-        global SHORT_RISK_PER_TRADE_PCT, SHORT_EMERGENCY_STOP_PCT, SHORT_MAX_HOLD_DAYS
-        global SHORT_PYRAMID_ENABLED
-        global FUTURES_LONG_RISK_PER_TRADE_PCT, FUTURES_LONG_EMERGENCY_STOP_PCT
-        global FUTURES_LONG_PYRAMID_ENABLED, FUTURES_LONG_PYRAMID_GAIN_PCT, FUTURES_LONG_PYRAMID_RISK_PCT
-
+        """Load full strategy config from Supabase into instance vars."""
         try:
             config = self.sync.load_config()
             if not config:
-                self.logger.info("[CONFIG] No remote config found, using local defaults")
+                self.logger.info(f"[CONFIG:{self.user_id[:8]}] No remote config found, using defaults")
                 return
 
-            # Helper: get value from config, return None if missing
             def _v(key):
                 v = config.get(key)
                 return v if v is not None else None
 
             # ── Mode toggles ──
-            self.bull_filter_enabled = config.get("bull_filter_enabled", BULL_FILTER_ENABLED)
-            self.bear_filter_enabled = config.get("bear_filter_enabled", BEAR_FILTER_ENABLED)
+            self.bull_filter_enabled = config.get("bull_filter_enabled", True)
+            self.bear_filter_enabled = config.get("bear_filter_enabled", self.bear_filter_enabled)
             self.short_enabled = config.get("short_enabled", True)
-            self.futures_long_enabled = config.get("futures_long_enabled", FUTURES_LONG_ENABLED)
+            self.futures_long_enabled = config.get("futures_long_enabled", self.futures_long_enabled)
             self.futures_long_leverage = max(1.0, min(3.0, float(
-                config.get("futures_long_leverage", FUTURES_LONG_LEVERAGE))))
+                config.get("futures_long_leverage", self.futures_long_leverage))))
 
-            # ── Spot Long strategy params (update dict in place) ──
+            # ── Spot Long strategy params ──
             spot_updates = {}
             if _v('donchian_period') is not None: spot_updates['donchian_period'] = int(_v('donchian_period'))
             if _v('exit_period') is not None: spot_updates['exit_period'] = int(_v('exit_period'))
@@ -256,21 +256,20 @@ class DonchianMultiCoinBot:
             if _v('tp1_size_pct') is not None: spot_updates['tp1_fraction'] = float(_v('tp1_size_pct')) / 100.0
             if _v('tp2_size_pct') is not None: spot_updates['tp2_fraction'] = float(_v('tp2_size_pct')) / 100.0
             if spot_updates:
-                STRATEGY_PARAMS.update(spot_updates)
+                self.strategy_params.update(spot_updates)
 
             # ── Spot Long scalars ──
-            if _v('risk_per_trade_pct') is not None: RISK_PER_TRADE_PCT = float(_v('risk_per_trade_pct'))
-            if _v('max_positions') is not None: MAX_POSITIONS = int(_v('max_positions'))
-            if _v('emergency_stop_pct') is not None: EMERGENCY_STOP_PCT = float(_v('emergency_stop_pct'))
-            if _v('pyramid_enabled') is not None: PYRAMID_ENABLED = bool(_v('pyramid_enabled'))
-            if _v('pyramid_gain_pct') is not None: PYRAMID_GAIN_PCT = float(_v('pyramid_gain_pct'))
-            if _v('pyramid_risk_pct') is not None: PYRAMID_RISK_PCT = float(_v('pyramid_risk_pct'))
+            if _v('risk_per_trade_pct') is not None: self.risk_per_trade_pct = float(_v('risk_per_trade_pct'))
+            if _v('max_positions') is not None: self.max_positions = int(_v('max_positions'))
+            if _v('emergency_stop_pct') is not None: self.emergency_stop_pct = float(_v('emergency_stop_pct'))
+            if _v('pyramid_enabled') is not None: self.pyramid_enabled = bool(_v('pyramid_enabled'))
+            if _v('pyramid_gain_pct') is not None: self.pyramid_gain_pct = float(_v('pyramid_gain_pct'))
+            if _v('pyramid_risk_pct') is not None: self.pyramid_risk_pct = float(_v('pyramid_risk_pct'))
 
             # ── Spot Long coin list ──
             coins = _v('coins')
             if coins and isinstance(coins, list) and len(coins) > 0:
-                COIN_UNIVERSE.clear()
-                COIN_UNIVERSE.extend(coins)
+                self.coin_universe = list(coins)
 
             # ── Short strategy params ──
             short_updates = {}
@@ -283,18 +282,17 @@ class DonchianMultiCoinBot:
             if _v('short_tp1_size_pct') is not None: short_updates['tp1_fraction'] = float(_v('short_tp1_size_pct')) / 100.0
             if _v('short_tp2_size_pct') is not None: short_updates['tp2_fraction'] = float(_v('short_tp2_size_pct')) / 100.0
             if short_updates:
-                SHORT_STRATEGY_PARAMS.update(short_updates)
+                self.short_strategy_params.update(short_updates)
 
             # ── Short scalars ──
-            if _v('short_risk_per_trade_pct') is not None: SHORT_RISK_PER_TRADE_PCT = float(_v('short_risk_per_trade_pct'))
-            if _v('short_emergency_stop_pct') is not None: SHORT_EMERGENCY_STOP_PCT = float(_v('short_emergency_stop_pct'))
-            if _v('short_max_hold_days') is not None: SHORT_MAX_HOLD_DAYS = int(_v('short_max_hold_days'))
+            if _v('short_risk_per_trade_pct') is not None: self.short_risk_per_trade_pct = float(_v('short_risk_per_trade_pct'))
+            if _v('short_emergency_stop_pct') is not None: self.short_emergency_stop_pct = float(_v('short_emergency_stop_pct'))
+            if _v('short_max_hold_days') is not None: self.short_max_hold_days = int(_v('short_max_hold_days'))
 
             # ── Short coin list ──
             short_coins = _v('short_coins')
             if short_coins and isinstance(short_coins, list) and len(short_coins) > 0:
-                SHORT_COIN_UNIVERSE.clear()
-                SHORT_COIN_UNIVERSE.extend(short_coins)
+                self.short_coin_universe = list(short_coins)
 
             # ── Futures Long strategy params ──
             fl_updates = {}
@@ -307,20 +305,19 @@ class DonchianMultiCoinBot:
             if _v('futures_long_tp1_size_pct') is not None: fl_updates['tp1_fraction'] = float(_v('futures_long_tp1_size_pct')) / 100.0
             if _v('futures_long_tp2_size_pct') is not None: fl_updates['tp2_fraction'] = float(_v('futures_long_tp2_size_pct')) / 100.0
             if fl_updates:
-                FUTURES_LONG_STRATEGY_PARAMS.update(fl_updates)
+                self.futures_long_strategy_params.update(fl_updates)
 
             # ── Futures Long scalars ──
-            if _v('futures_long_risk_per_trade_pct') is not None: FUTURES_LONG_RISK_PER_TRADE_PCT = float(_v('futures_long_risk_per_trade_pct'))
-            if _v('futures_long_emergency_stop_pct') is not None: FUTURES_LONG_EMERGENCY_STOP_PCT = float(_v('futures_long_emergency_stop_pct'))
-            if _v('futures_long_pyramid_enabled') is not None: FUTURES_LONG_PYRAMID_ENABLED = bool(_v('futures_long_pyramid_enabled'))
-            if _v('futures_long_pyramid_gain_pct') is not None: FUTURES_LONG_PYRAMID_GAIN_PCT = float(_v('futures_long_pyramid_gain_pct'))
-            if _v('futures_long_pyramid_risk_pct') is not None: FUTURES_LONG_PYRAMID_RISK_PCT = float(_v('futures_long_pyramid_risk_pct'))
+            if _v('futures_long_risk_per_trade_pct') is not None: self.futures_long_risk_per_trade_pct = float(_v('futures_long_risk_per_trade_pct'))
+            if _v('futures_long_emergency_stop_pct') is not None: self.futures_long_emergency_stop_pct = float(_v('futures_long_emergency_stop_pct'))
+            if _v('futures_long_pyramid_enabled') is not None: self.futures_long_pyramid_enabled = bool(_v('futures_long_pyramid_enabled'))
+            if _v('futures_long_pyramid_gain_pct') is not None: self.futures_long_pyramid_gain_pct = float(_v('futures_long_pyramid_gain_pct'))
+            if _v('futures_long_pyramid_risk_pct') is not None: self.futures_long_pyramid_risk_pct = float(_v('futures_long_pyramid_risk_pct'))
 
             # ── Futures Long coin list ──
             fl_coins = _v('futures_long_coins')
             if fl_coins and isinstance(fl_coins, list) and len(fl_coins) > 0:
-                FUTURES_LONG_COIN_UNIVERSE.clear()
-                FUTURES_LONG_COIN_UNIVERSE.extend(fl_coins)
+                self.futures_long_coin_universe = list(fl_coins)
 
             # ── Telegram per-user credentials ──
             self.telegram_bot_token = config.get("telegram_bot_token", "")
@@ -330,18 +327,18 @@ class DonchianMultiCoinBot:
             self.notify_daily_summary = config.get("notify_daily_summary", True)
 
             # ── Recreate strategy instances with updated params ──
-            self.strategies = {sym: DonchianBreakoutStrategy(STRATEGY_PARAMS) for sym in COIN_UNIVERSE}
-            self.short_strategies = {sym: DonchianBreakoutStrategy(SHORT_STRATEGY_PARAMS) for sym in SHORT_COIN_UNIVERSE}
-            self.futures_long_strategies = {sym: DonchianBreakoutStrategy(FUTURES_LONG_STRATEGY_PARAMS) for sym in FUTURES_LONG_COIN_UNIVERSE}
+            self.strategies = {sym: DonchianBreakoutStrategy(self.strategy_params) for sym in self.coin_universe}
+            self.short_strategies = {sym: DonchianBreakoutStrategy(self.short_strategy_params) for sym in self.short_coin_universe}
+            self.futures_long_strategies = {sym: DonchianBreakoutStrategy(self.futures_long_strategy_params) for sym in self.futures_long_coin_universe}
 
             self.logger.info(
-                f"[CONFIG] Loaded from Supabase — "
+                f"[CONFIG:{self.user_id[:8]}] Loaded from Supabase — "
                 f"bull: {'ON' if self.bull_filter_enabled else 'OFF'}, "
                 f"short: {'ON' if self.short_enabled else 'OFF'} (bear: {'ON' if self.bear_filter_enabled else 'OFF'}), "
                 f"FL: {'ON' if self.futures_long_enabled else 'OFF'} ({self.futures_long_leverage}x), "
-                f"max_pos: {MAX_POSITIONS}, risk: {RISK_PER_TRADE_PCT}%, "
-                f"ATR: {STRATEGY_PARAMS['atr_mult']}x/{SHORT_STRATEGY_PARAMS['atr_mult']}x/{FUTURES_LONG_STRATEGY_PARAMS['atr_mult']}x, "
-                f"coins: {len(COIN_UNIVERSE)}L/{len(FUTURES_LONG_COIN_UNIVERSE)}FL/{len(SHORT_COIN_UNIVERSE)}S"
+                f"max_pos: {self.max_positions}, risk: {self.risk_per_trade_pct}%, "
+                f"ATR: {self.strategy_params['atr_mult']}x/{self.short_strategy_params['atr_mult']}x/{self.futures_long_strategy_params['atr_mult']}x, "
+                f"coins: {len(self.coin_universe)}L/{len(self.futures_long_coin_universe)}FL/{len(self.short_coin_universe)}S"
             )
 
         except Exception as e:
@@ -402,18 +399,18 @@ class DonchianMultiCoinBot:
             else:
                 pos_data['high_watermark'] = pos['high_watermark']
             state['positions'][symbol] = pos_data
-        with open(STATE_FILE, 'w') as f:
+        with open(self.state_file, 'w') as f:
             json.dump(state, f, indent=2)
 
     def load_state(self):
         """Load saved state on restart"""
-        if not os.path.exists(STATE_FILE):
+        if not os.path.exists(self.state_file):
             return
 
         try:
-            with open(STATE_FILE, 'r') as f:
+            with open(self.state_file, 'r') as f:
                 state = json.load(f)
-            self.cash = state.get('cash', STARTING_CAPITAL)
+            self.cash = state.get('cash', self.starting_capital)
             self.total_realized_pnl = state.get('total_realized_pnl', 0)
             for symbol, pos_data in state.get('positions', {}).items():
                 side = pos_data.get('side', 'LONG')
@@ -464,7 +461,7 @@ class DonchianMultiCoinBot:
         """Get current prices for all coins (long + futures long + short universes)"""
         prices = {}
         # Fetch spot prices for all unique coins
-        all_coins = set(COIN_UNIVERSE) | set(SHORT_COIN_UNIVERSE) | set(FUTURES_LONG_COIN_UNIVERSE)
+        all_coins = set(self.coin_universe) | set(self.short_coin_universe) | set(self.futures_long_coin_universe)
         for symbol in sorted(all_coins):
             try:
                 prices[symbol] = self.fetch_current_price(symbol)
@@ -609,14 +606,14 @@ class DonchianMultiCoinBot:
     def calculate_position_size(self, symbol, entry_price, atr, prices=None):
         """Calculate position size using 2% risk rule"""
         equity = self.total_equity(prices)
-        risk_amount = equity * (RISK_PER_TRADE_PCT / 100)
-        stop_distance = STRATEGY_PARAMS['atr_mult'] * atr
+        risk_amount = equity * (self.risk_per_trade_pct / 100)
+        stop_distance = self.strategy_params['atr_mult'] * atr
         stop_pct = stop_distance / entry_price
 
         if stop_pct > 0:
             size = risk_amount / stop_pct
         else:
-            size = equity / MAX_POSITIONS
+            size = equity / self.max_positions
 
         # Cap at available cash (keep 5% reserve)
         size = min(size, self.cash * 0.95)
@@ -630,8 +627,8 @@ class DonchianMultiCoinBot:
         """Open a new position"""
         if symbol in self.positions:
             return  # already in position
-        if len(self.positions) >= MAX_POSITIONS:
-            self.logger.info(f"SKIP BUY {symbol}: max {MAX_POSITIONS} positions reached")
+        if len(self.positions) >= self.max_positions:
+            self.logger.info(f"SKIP BUY {symbol}: max {self.max_positions} positions reached")
             return
 
         size = self.calculate_position_size(symbol, price, atr, prices)
@@ -640,7 +637,7 @@ class DonchianMultiCoinBot:
             return
 
         self.cash -= size
-        stop_price = price - (STRATEGY_PARAMS['atr_mult'] * atr)
+        stop_price = price - (self.strategy_params['atr_mult'] * atr)
 
         self.positions[symbol] = {
             'entry_price': price,
@@ -671,7 +668,7 @@ class DonchianMultiCoinBot:
             f"📦 Size: ${size:,.0f}\n"
             f"🛡 Stop: ${stop_price:,.2f}\n"
             f"📊 {reason}\n"
-            f"📈 Positions: {pos_count}/{MAX_POSITIONS}\n"
+            f"📈 Positions: {pos_count}/{self.max_positions}\n"
             f"💼 Equity: ${equity:,.0f}\n"
             f"🏷 Mode: {mode}"
         )
@@ -770,8 +767,8 @@ class DonchianMultiCoinBot:
             return  # only one add per position
 
         equity = self.total_equity(prices)
-        add_risk = equity * (PYRAMID_RISK_PCT / 100)
-        stop_distance = STRATEGY_PARAMS['atr_mult'] * atr
+        add_risk = equity * (self.pyramid_risk_pct / 100)
+        stop_distance = self.strategy_params['atr_mult'] * atr
         stop_pct = stop_distance / price
 
         if stop_pct > 0:
@@ -790,7 +787,7 @@ class DonchianMultiCoinBot:
         pos['pyramided'] = True
 
         # Update stop for new combined position
-        pos['stop_price'] = pos['high_watermark'] - (STRATEGY_PARAMS['atr_mult'] * atr)
+        pos['stop_price'] = pos['high_watermark'] - (self.strategy_params['atr_mult'] * atr)
 
         self.save_state()
 
@@ -830,16 +827,16 @@ class DonchianMultiCoinBot:
     # ------------------------------------------------------------------
 
     def calculate_short_position_size(self, symbol, entry_price, atr, prices=None):
-        """Calculate position size for shorts using SHORT_RISK_PER_TRADE_PCT"""
+        """Calculate position size for shorts using self.short_risk_per_trade_pct"""
         equity = self.total_equity(prices)
-        risk_amount = equity * (SHORT_RISK_PER_TRADE_PCT / 100)
-        stop_distance = SHORT_STRATEGY_PARAMS['atr_mult'] * atr
+        risk_amount = equity * (self.short_risk_per_trade_pct / 100)
+        stop_distance = self.short_strategy_params['atr_mult'] * atr
         stop_pct = stop_distance / entry_price
 
         if stop_pct > 0:
             size = risk_amount / stop_pct
         else:
-            size = equity / MAX_POSITIONS
+            size = equity / self.max_positions
 
         # Cap at available cash (keep 5% reserve)
         size = min(size, self.cash * 0.95)
@@ -852,14 +849,14 @@ class DonchianMultiCoinBot:
     def calculate_futures_long_position_size(self, symbol, entry_price, atr, prices=None):
         """Calculate position size for futures longs with leverage"""
         equity = self.total_equity(prices)
-        risk_amount = equity * (FUTURES_LONG_RISK_PER_TRADE_PCT / 100)
-        stop_distance = FUTURES_LONG_STRATEGY_PARAMS['atr_mult'] * atr
+        risk_amount = equity * (self.futures_long_risk_per_trade_pct / 100)
+        stop_distance = self.futures_long_strategy_params['atr_mult'] * atr
         stop_pct = stop_distance / entry_price
 
         if stop_pct > 0:
             size = risk_amount / stop_pct
         else:
-            size = equity / MAX_POSITIONS
+            size = equity / self.max_positions
 
         # Apply leverage (amplifies position size)
         size = size * self.futures_long_leverage
@@ -886,8 +883,8 @@ class DonchianMultiCoinBot:
         # Defensive: no same-coin conflict
         if symbol in self.positions or perp_id in self.positions:
             return
-        if len(self.positions) >= MAX_POSITIONS:
-            self.logger.info(f"SKIP SHORT {symbol}: max {MAX_POSITIONS} positions reached")
+        if len(self.positions) >= self.max_positions:
+            self.logger.info(f"SKIP SHORT {symbol}: max {self.max_positions} positions reached")
             return
 
         size = self.calculate_short_position_size(symbol, price, atr, prices)
@@ -902,7 +899,7 @@ class DonchianMultiCoinBot:
             return
 
         self.cash -= size
-        stop_price = price + (SHORT_STRATEGY_PARAMS['atr_mult'] * atr)
+        stop_price = price + (self.short_strategy_params['atr_mult'] * atr)
 
         self.positions[perp_id] = {
             'side': 'SHORT',
@@ -936,7 +933,7 @@ class DonchianMultiCoinBot:
             f"📦 Size: ${size:,.0f}\n"
             f"🛡 Stop: ${stop_price:,.2f} (above entry)\n"
             f"📊 {reason}\n"
-            f"📈 Positions: {pos_count}/{MAX_POSITIONS}\n"
+            f"📈 Positions: {pos_count}/{self.max_positions}\n"
             f"💼 Equity: ${equity:,.0f}\n"
             f"🏷 Mode: {mode} | Futures"
         )
@@ -1053,8 +1050,8 @@ class DonchianMultiCoinBot:
         # Defensive: no same-coin conflict
         if symbol in self.positions or perp_id in self.positions:
             return
-        if len(self.positions) >= MAX_POSITIONS:
-            self.logger.info(f"SKIP FUTURES_LONG {symbol}: max {MAX_POSITIONS} positions reached")
+        if len(self.positions) >= self.max_positions:
+            self.logger.info(f"SKIP FUTURES_LONG {symbol}: max {self.max_positions} positions reached")
             return
 
         size = self.calculate_futures_long_position_size(symbol, price, atr, prices)
@@ -1072,7 +1069,7 @@ class DonchianMultiCoinBot:
             return
 
         self.cash -= size
-        stop_price = price - (FUTURES_LONG_STRATEGY_PARAMS['atr_mult'] * atr)
+        stop_price = price - (self.futures_long_strategy_params['atr_mult'] * atr)
 
         self.positions[perp_id] = {
             'side': 'FUTURES_LONG',
@@ -1107,7 +1104,7 @@ class DonchianMultiCoinBot:
             f"🛡 Stop: ${stop_price:,.2f}\n"
             f"📊 {reason}\n"
             f"⚡ Leverage: {self.futures_long_leverage}x\n"
-            f"📈 Positions: {pos_count}/{MAX_POSITIONS}\n"
+            f"📈 Positions: {pos_count}/{self.max_positions}\n"
             f"💼 Equity: ${equity:,.0f}\n"
             f"🏷 Mode: {mode} | Futures Long"
         )
@@ -1216,8 +1213,8 @@ class DonchianMultiCoinBot:
             return  # only one add per position
 
         equity = self.total_equity(prices)
-        add_risk = equity * (FUTURES_LONG_PYRAMID_RISK_PCT / 100)
-        stop_distance = FUTURES_LONG_STRATEGY_PARAMS['atr_mult'] * atr
+        add_risk = equity * (self.futures_long_pyramid_risk_pct / 100)
+        stop_distance = self.futures_long_strategy_params['atr_mult'] * atr
         stop_pct = stop_distance / price
 
         if stop_pct > 0:
@@ -1246,7 +1243,7 @@ class DonchianMultiCoinBot:
         pos['pyramided'] = True
 
         # Update stop for new combined position
-        pos['stop_price'] = pos['high_watermark'] - (FUTURES_LONG_STRATEGY_PARAMS['atr_mult'] * atr)
+        pos['stop_price'] = pos['high_watermark'] - (self.futures_long_strategy_params['atr_mult'] * atr)
 
         self.save_state()
 
@@ -1302,7 +1299,7 @@ class DonchianMultiCoinBot:
         longs = sum(1 for p in self.positions.values() if p.get('side', 'LONG') == 'LONG')
         fl = sum(1 for p in self.positions.values() if p.get('side') == 'FUTURES_LONG')
         shorts = sum(1 for p in self.positions.values() if p.get('side') == 'SHORT')
-        print(f"Portfolio: ${equity:,.0f} ({len(self.positions)}/{MAX_POSITIONS} positions [{longs}L/{fl}FL/{shorts}S], ${self.cash:,.0f} cash)")
+        print(f"Portfolio: ${equity:,.0f} ({len(self.positions)}/{self.max_positions} positions [{longs}L/{fl}FL/{shorts}S], ${self.cash:,.0f} cash)")
 
         if self.positions:
             print(f"\nOpen positions:")
@@ -1328,7 +1325,7 @@ class DonchianMultiCoinBot:
                 strategy = self.strategies.get(symbol)
                 if not strategy:
                     continue
-                df = strategy.fetch_daily_candles(symbol, limit=STRATEGY_PARAMS['lookback'])
+                df = strategy.fetch_daily_candles(symbol, limit=self.strategy_params['lookback'])
                 df = strategy.calculate_indicators(df)
 
                 if len(df) < 25:
@@ -1344,9 +1341,9 @@ class DonchianMultiCoinBot:
                 # Blow-off detection
                 vol_sma = float(current['volume_sma']) if current['volume_sma'] > 0 else 1
                 volume_ratio = float(current['volume']) / vol_sma
-                is_blowoff = (volume_ratio > STRATEGY_PARAMS['volume_blowoff']
-                              and float(current['rsi']) > STRATEGY_PARAMS['rsi_blowoff'])
-                stop_mult = STRATEGY_PARAMS['atr_mult_tight'] if is_blowoff else STRATEGY_PARAMS['atr_mult']
+                is_blowoff = (volume_ratio > self.strategy_params['volume_blowoff']
+                              and float(current['rsi']) > self.strategy_params['rsi_blowoff'])
+                stop_mult = self.strategy_params['atr_mult_tight'] if is_blowoff else self.strategy_params['atr_mult']
 
                 # Update trailing stop
                 pos['stop_price'] = pos['high_watermark'] - (stop_mult * pos['last_atr'])
@@ -1362,22 +1359,22 @@ class DonchianMultiCoinBot:
                 if not exit_reason and pd.notna(prev['exit_low']) and current_close < float(prev['exit_low']):
                     exit_reason = 'Donchian exit (10-day low)'
 
-                if not exit_reason and current_close <= pos['entry_price'] * (1 - EMERGENCY_STOP_PCT / 100):
-                    exit_reason = f'Emergency stop ({EMERGENCY_STOP_PCT}%)'
+                if not exit_reason and current_close <= pos['entry_price'] * (1 - self.emergency_stop_pct / 100):
+                    exit_reason = f'Emergency stop ({self.emergency_stop_pct}%)'
 
                 # Check partial profit taking
                 if not exit_reason:
                     gain_pct = ((current_close - pos['entry_price']) / pos['entry_price']) * 100
-                    if pos['partials_taken'] == 0 and gain_pct >= STRATEGY_PARAMS['tp1_pct']:
-                        self.execute_sell(symbol, current_close, f'Partial TP1 (+{STRATEGY_PARAMS["tp1_pct"]}%)',
-                                          fraction=STRATEGY_PARAMS['tp1_fraction'])
+                    if pos['partials_taken'] == 0 and gain_pct >= self.strategy_params['tp1_pct']:
+                        self.execute_sell(symbol, current_close, f'Partial TP1 (+{self.strategy_params["tp1_pct"]}%)',
+                                          fraction=self.strategy_params['tp1_fraction'])
                         pos['partials_taken'] = 1
-                        pos['remaining_fraction'] *= (1 - STRATEGY_PARAMS['tp1_fraction'])
-                    elif pos['partials_taken'] == 1 and gain_pct >= STRATEGY_PARAMS['tp2_pct']:
-                        self.execute_sell(symbol, current_close, f'Partial TP2 (+{STRATEGY_PARAMS["tp2_pct"]}%)',
-                                          fraction=STRATEGY_PARAMS['tp2_fraction'])
+                        pos['remaining_fraction'] *= (1 - self.strategy_params['tp1_fraction'])
+                    elif pos['partials_taken'] == 1 and gain_pct >= self.strategy_params['tp2_pct']:
+                        self.execute_sell(symbol, current_close, f'Partial TP2 (+{self.strategy_params["tp2_pct"]}%)',
+                                          fraction=self.strategy_params['tp2_fraction'])
                         pos['partials_taken'] = 2
-                        pos['remaining_fraction'] *= (1 - STRATEGY_PARAMS['tp2_fraction'])
+                        pos['remaining_fraction'] *= (1 - self.strategy_params['tp2_fraction'])
 
                 if exit_reason:
                     self.execute_sell(symbol, current_close, exit_reason)
@@ -1399,7 +1396,7 @@ class DonchianMultiCoinBot:
                 strategy = self.futures_long_strategies.get(spot_sym)
                 if not strategy:
                     continue
-                df = strategy.fetch_daily_candles(spot_sym, limit=FUTURES_LONG_STRATEGY_PARAMS['lookback'])
+                df = strategy.fetch_daily_candles(spot_sym, limit=self.futures_long_strategy_params['lookback'])
                 df = strategy.calculate_indicators(df)
 
                 if len(df) < 25:
@@ -1415,9 +1412,9 @@ class DonchianMultiCoinBot:
                 # Blow-off detection (same as spot longs)
                 vol_sma = float(current['volume_sma']) if current['volume_sma'] > 0 else 1
                 volume_ratio = float(current['volume']) / vol_sma
-                is_blowoff = (volume_ratio > FUTURES_LONG_STRATEGY_PARAMS['volume_blowoff']
-                              and float(current['rsi']) > FUTURES_LONG_STRATEGY_PARAMS['rsi_blowoff'])
-                stop_mult = FUTURES_LONG_STRATEGY_PARAMS['atr_mult_tight'] if is_blowoff else FUTURES_LONG_STRATEGY_PARAMS['atr_mult']
+                is_blowoff = (volume_ratio > self.futures_long_strategy_params['volume_blowoff']
+                              and float(current['rsi']) > self.futures_long_strategy_params['rsi_blowoff'])
+                stop_mult = self.futures_long_strategy_params['atr_mult_tight'] if is_blowoff else self.futures_long_strategy_params['atr_mult']
 
                 # Update trailing stop
                 pos['stop_price'] = pos['high_watermark'] - (stop_mult * pos['last_atr'])
@@ -1431,28 +1428,28 @@ class DonchianMultiCoinBot:
                     exit_reason = f'Trailing stop ({stop_mult}x ATR){suffix}'
 
                 if not exit_reason and pd.notna(prev['exit_low']) and current_close < float(prev['exit_low']):
-                    exit_reason = f'Donchian exit ({FUTURES_LONG_STRATEGY_PARAMS["exit_period"]}-day low)'
+                    exit_reason = f'Donchian exit ({self.futures_long_strategy_params["exit_period"]}-day low)'
 
-                if not exit_reason and current_close <= pos['entry_price'] * (1 - FUTURES_LONG_EMERGENCY_STOP_PCT / 100):
-                    exit_reason = f'Emergency stop ({FUTURES_LONG_EMERGENCY_STOP_PCT}%)'
+                if not exit_reason and current_close <= pos['entry_price'] * (1 - self.futures_long_emergency_stop_pct / 100):
+                    exit_reason = f'Emergency stop ({self.futures_long_emergency_stop_pct}%)'
 
                 # Check partial profit taking
                 if not exit_reason:
                     gain_pct = ((current_close - pos['entry_price']) / pos['entry_price']) * 100
-                    if pos['partials_taken'] == 0 and gain_pct >= FUTURES_LONG_STRATEGY_PARAMS['tp1_pct']:
+                    if pos['partials_taken'] == 0 and gain_pct >= self.futures_long_strategy_params['tp1_pct']:
                         self.execute_futures_long_close(symbol, current_close,
-                                                        f'Futures Long Partial TP1 (+{FUTURES_LONG_STRATEGY_PARAMS["tp1_pct"]}%)',
-                                                        fraction=FUTURES_LONG_STRATEGY_PARAMS['tp1_fraction'])
+                                                        f'Futures Long Partial TP1 (+{self.futures_long_strategy_params["tp1_pct"]}%)',
+                                                        fraction=self.futures_long_strategy_params['tp1_fraction'])
                         if symbol in self.positions:
                             self.positions[symbol]['partials_taken'] = 1
-                            self.positions[symbol]['remaining_fraction'] *= (1 - FUTURES_LONG_STRATEGY_PARAMS['tp1_fraction'])
-                    elif pos['partials_taken'] == 1 and gain_pct >= FUTURES_LONG_STRATEGY_PARAMS['tp2_pct']:
+                            self.positions[symbol]['remaining_fraction'] *= (1 - self.futures_long_strategy_params['tp1_fraction'])
+                    elif pos['partials_taken'] == 1 and gain_pct >= self.futures_long_strategy_params['tp2_pct']:
                         self.execute_futures_long_close(symbol, current_close,
-                                                        f'Futures Long Partial TP2 (+{FUTURES_LONG_STRATEGY_PARAMS["tp2_pct"]}%)',
-                                                        fraction=FUTURES_LONG_STRATEGY_PARAMS['tp2_fraction'])
+                                                        f'Futures Long Partial TP2 (+{self.futures_long_strategy_params["tp2_pct"]}%)',
+                                                        fraction=self.futures_long_strategy_params['tp2_fraction'])
                         if symbol in self.positions:
                             self.positions[symbol]['partials_taken'] = 2
-                            self.positions[symbol]['remaining_fraction'] *= (1 - FUTURES_LONG_STRATEGY_PARAMS['tp2_fraction'])
+                            self.positions[symbol]['remaining_fraction'] *= (1 - self.futures_long_strategy_params['tp2_fraction'])
 
                 if exit_reason:
                     self.execute_futures_long_close(symbol, current_close, exit_reason)
@@ -1474,7 +1471,7 @@ class DonchianMultiCoinBot:
                 strategy = self.short_strategies.get(spot_sym)
                 if not strategy:
                     continue
-                df = strategy.fetch_daily_candles(spot_sym, limit=SHORT_STRATEGY_PARAMS['lookback'])
+                df = strategy.fetch_daily_candles(spot_sym, limit=self.short_strategy_params['lookback'])
                 df = strategy.calculate_short_indicators(df)
 
                 if len(df) < 25:
@@ -1494,9 +1491,9 @@ class DonchianMultiCoinBot:
                 # Bounce risk detection (inverted blow-off)
                 vol_sma = float(current['volume_sma']) if current['volume_sma'] > 0 else 1
                 volume_ratio = float(current['volume']) / vol_sma
-                is_bounce_risk = (volume_ratio > SHORT_STRATEGY_PARAMS['volume_blowoff']
-                                  and float(current['rsi']) < SHORT_STRATEGY_PARAMS['rsi_blowoff'])
-                stop_mult = SHORT_STRATEGY_PARAMS['atr_mult_tight'] if is_bounce_risk else SHORT_STRATEGY_PARAMS['atr_mult']
+                is_bounce_risk = (volume_ratio > self.short_strategy_params['volume_blowoff']
+                                  and float(current['rsi']) < self.short_strategy_params['rsi_blowoff'])
+                stop_mult = self.short_strategy_params['atr_mult_tight'] if is_bounce_risk else self.short_strategy_params['atr_mult']
 
                 # Update inverted trailing stop
                 pos['stop_price'] = pos['low_watermark'] + (stop_mult * pos['last_atr'])
@@ -1510,33 +1507,33 @@ class DonchianMultiCoinBot:
 
                 # 2. Donchian exit: above N-day high (reversal)
                 if not exit_reason and pd.notna(prev.get('exit_high')) and current_close > float(prev['exit_high']):
-                    exit_reason = f'Donchian exit ({SHORT_STRATEGY_PARAMS["exit_period"]}-day high)'
+                    exit_reason = f'Donchian exit ({self.short_strategy_params["exit_period"]}-day high)'
 
                 # 3. Emergency stop: price rose too much
-                if not exit_reason and current_close >= pos['entry_price'] * (1 + SHORT_EMERGENCY_STOP_PCT / 100):
-                    exit_reason = f'Short emergency stop (+{SHORT_EMERGENCY_STOP_PCT}%)'
+                if not exit_reason and current_close >= pos['entry_price'] * (1 + self.short_emergency_stop_pct / 100):
+                    exit_reason = f'Short emergency stop (+{self.short_emergency_stop_pct}%)'
 
                 # 4. Max hold days
-                if not exit_reason and pos['hold_days'] >= SHORT_MAX_HOLD_DAYS:
-                    exit_reason = f'Max hold ({SHORT_MAX_HOLD_DAYS} days)'
+                if not exit_reason and pos['hold_days'] >= self.short_max_hold_days:
+                    exit_reason = f'Max hold ({self.short_max_hold_days} days)'
 
                 # Check partial profit taking (inverted: profit when price drops)
                 if not exit_reason:
                     gain_pct = ((pos['entry_price'] - current_close) / pos['entry_price']) * 100
-                    if pos['partials_taken'] == 0 and gain_pct >= SHORT_STRATEGY_PARAMS['tp1_pct']:
+                    if pos['partials_taken'] == 0 and gain_pct >= self.short_strategy_params['tp1_pct']:
                         self.execute_short_close(symbol, current_close,
-                                                 f'Short Partial TP1 (-{SHORT_STRATEGY_PARAMS["tp1_pct"]}% drop)',
-                                                 fraction=SHORT_STRATEGY_PARAMS['tp1_fraction'])
+                                                 f'Short Partial TP1 (-{self.short_strategy_params["tp1_pct"]}% drop)',
+                                                 fraction=self.short_strategy_params['tp1_fraction'])
                         if symbol in self.positions:
                             self.positions[symbol]['partials_taken'] = 1
-                            self.positions[symbol]['remaining_fraction'] *= (1 - SHORT_STRATEGY_PARAMS['tp1_fraction'])
-                    elif pos['partials_taken'] == 1 and gain_pct >= SHORT_STRATEGY_PARAMS['tp2_pct']:
+                            self.positions[symbol]['remaining_fraction'] *= (1 - self.short_strategy_params['tp1_fraction'])
+                    elif pos['partials_taken'] == 1 and gain_pct >= self.short_strategy_params['tp2_pct']:
                         self.execute_short_close(symbol, current_close,
-                                                 f'Short Partial TP2 (-{SHORT_STRATEGY_PARAMS["tp2_pct"]}% drop)',
-                                                 fraction=SHORT_STRATEGY_PARAMS['tp2_fraction'])
+                                                 f'Short Partial TP2 (-{self.short_strategy_params["tp2_pct"]}% drop)',
+                                                 fraction=self.short_strategy_params['tp2_fraction'])
                         if symbol in self.positions:
                             self.positions[symbol]['partials_taken'] = 2
-                            self.positions[symbol]['remaining_fraction'] *= (1 - SHORT_STRATEGY_PARAMS['tp2_fraction'])
+                            self.positions[symbol]['remaining_fraction'] *= (1 - self.short_strategy_params['tp2_fraction'])
 
                 if exit_reason:
                     self.execute_short_close(symbol, current_close, exit_reason)
@@ -1562,7 +1559,7 @@ class DonchianMultiCoinBot:
         self.logger.info(f"Bull filter: {bull_status} | Bear filter: {bear_status}")
 
         # ===== FUTURES LONG PYRAMIDING (gated by bull filter) =====
-        if FUTURES_LONG_PYRAMID_ENABLED and self.futures_long_enabled and is_bull and self.positions:
+        if self.futures_long_pyramid_enabled and self.futures_long_enabled and is_bull and self.positions:
             print(f"\nChecking futures long pyramid opportunities...")
             for symbol in list(self.positions.keys()):
                 pos = self.positions[symbol]
@@ -1574,7 +1571,7 @@ class DonchianMultiCoinBot:
                     strategy = self.futures_long_strategies.get(spot_sym)
                     if not strategy:
                         continue
-                    df = strategy.fetch_daily_candles(spot_sym, limit=FUTURES_LONG_STRATEGY_PARAMS['lookback'])
+                    df = strategy.fetch_daily_candles(spot_sym, limit=self.futures_long_strategy_params['lookback'])
                     df = strategy.calculate_indicators(df)
                     if len(df) < 25:
                         continue
@@ -1587,14 +1584,14 @@ class DonchianMultiCoinBot:
                     new_high = (pd.notna(prev['donchian_high'])
                                 and current_close > float(prev['donchian_high']))
 
-                    if gain_pct >= FUTURES_LONG_PYRAMID_GAIN_PCT and new_high:
+                    if gain_pct >= self.futures_long_pyramid_gain_pct and new_high:
                         atr = float(current['atr'])
                         self.execute_futures_long_pyramid(symbol, current_close, atr, gain_pct, prices)
                     else:
-                        if gain_pct >= FUTURES_LONG_PYRAMID_GAIN_PCT:
+                        if gain_pct >= self.futures_long_pyramid_gain_pct:
                             print(f"  {symbol} FL: +{gain_pct:.1f}% but no new 20d high")
                         else:
-                            print(f"  {symbol} FL: +{gain_pct:.1f}% (need +{FUTURES_LONG_PYRAMID_GAIN_PCT}%)")
+                            print(f"  {symbol} FL: +{gain_pct:.1f}% (need +{self.futures_long_pyramid_gain_pct}%)")
 
                     time.sleep(0.3)
 
@@ -1602,7 +1599,7 @@ class DonchianMultiCoinBot:
                     self.logger.error(f"Futures long pyramid check failed for {symbol}: {e}")
 
         # ===== LONG PYRAMIDING (gated by bull filter, spot longs only) =====
-        if PYRAMID_ENABLED and is_bull and self.positions:
+        if self.pyramid_enabled and is_bull and self.positions:
             print(f"\nChecking long pyramid opportunities...")
             for symbol in list(self.positions.keys()):
                 pos = self.positions[symbol]
@@ -1613,7 +1610,7 @@ class DonchianMultiCoinBot:
                     strategy = self.strategies.get(symbol)
                     if not strategy:
                         continue
-                    df = strategy.fetch_daily_candles(symbol, limit=STRATEGY_PARAMS['lookback'])
+                    df = strategy.fetch_daily_candles(symbol, limit=self.strategy_params['lookback'])
                     df = strategy.calculate_indicators(df)
                     if len(df) < 25:
                         continue
@@ -1626,14 +1623,14 @@ class DonchianMultiCoinBot:
                     new_high = (pd.notna(prev['donchian_high'])
                                 and current_close > float(prev['donchian_high']))
 
-                    if gain_pct >= PYRAMID_GAIN_PCT and new_high:
+                    if gain_pct >= self.pyramid_gain_pct and new_high:
                         atr = float(current['atr'])
                         self.execute_pyramid(symbol, current_close, atr, gain_pct, prices)
                     else:
-                        if gain_pct >= PYRAMID_GAIN_PCT:
+                        if gain_pct >= self.pyramid_gain_pct:
                             print(f"  {symbol}: +{gain_pct:.1f}% but no new 20d high")
                         else:
-                            print(f"  {symbol}: +{gain_pct:.1f}% (need +{PYRAMID_GAIN_PCT}%)")
+                            print(f"  {symbol}: +{gain_pct:.1f}% (need +{self.pyramid_gain_pct}%)")
 
                     time.sleep(0.3)
 
@@ -1648,12 +1645,12 @@ class DonchianMultiCoinBot:
             print(f"  FUTURES LONG ENTRIES BLOCKED — bull filter is {bull_status}")
             self.logger.info(f"Futures long entries blocked: {bull_status}")
         else:
-            for symbol in FUTURES_LONG_COIN_UNIVERSE:
+            for symbol in self.futures_long_coin_universe:
                 perp_id = SPOT_TO_PERP.get(symbol, '')
                 # No same-coin conflict (spot or perp)
                 if symbol in self.positions or perp_id in self.positions:
                     continue
-                if len(self.positions) >= MAX_POSITIONS:
+                if len(self.positions) >= self.max_positions:
                     print(f"  Max positions reached, skipping remaining")
                     break
 
@@ -1679,10 +1676,10 @@ class DonchianMultiCoinBot:
             print(f"  LONG ENTRIES BLOCKED — bull filter is {bull_status}")
             self.logger.info(f"Long entries blocked: {bull_status}")
         else:
-            for symbol in COIN_UNIVERSE:
+            for symbol in self.coin_universe:
                 if symbol in self.positions or SPOT_TO_PERP.get(symbol, '') in self.positions:
                     continue
-                if len(self.positions) >= MAX_POSITIONS:
+                if len(self.positions) >= self.max_positions:
                     print(f"  Max positions reached, skipping remaining")
                     break
 
@@ -1711,12 +1708,12 @@ class DonchianMultiCoinBot:
             print(f"  SHORT ENTRIES BLOCKED — bear filter is {bear_status}")
             self.logger.info(f"Short entries blocked: {bear_status}")
         else:
-            for symbol in SHORT_COIN_UNIVERSE:
+            for symbol in self.short_coin_universe:
                 perp_id = SPOT_TO_PERP.get(symbol, '')
                 # No same-coin conflict
                 if symbol in self.positions or perp_id in self.positions:
                     continue
-                if len(self.positions) >= MAX_POSITIONS:
+                if len(self.positions) >= self.max_positions:
                     print(f"  Max positions reached, skipping remaining")
                     break
 
@@ -1738,7 +1735,7 @@ class DonchianMultiCoinBot:
 
         # Daily summary
         equity = self.total_equity(prices)
-        total_return = ((equity - STARTING_CAPITAL) / STARTING_CAPITAL) * 100
+        total_return = ((equity - self.starting_capital) / self.starting_capital) * 100
         longs = sum(1 for p in self.positions.values() if p.get('side', 'LONG') == 'LONG')
         fl = sum(1 for p in self.positions.values() if p.get('side') == 'FUTURES_LONG')
         shorts = sum(1 for p in self.positions.values() if p.get('side') == 'SHORT')
@@ -1746,7 +1743,7 @@ class DonchianMultiCoinBot:
 
         # Sync daily check event to Supabase
         self.sync.sync_event("daily_check",
-                             f"Daily scan: {len(self.positions)}/{MAX_POSITIONS} positions ({longs}L/{fl}FL/{shorts}S), "
+                             f"Daily scan: {len(self.positions)}/{self.max_positions} positions ({longs}L/{fl}FL/{shorts}S), "
                              f"${equity:,.0f} equity, bull={bull_status}, bear={bear_status}",
                              {"equity": round(equity, 2), "positions": len(self.positions),
                               "longs": longs, "futures_longs": fl, "shorts": shorts,
@@ -1787,7 +1784,7 @@ class DonchianMultiCoinBot:
                     old_stop = pos['stop_price']
                     pos['high_watermark'] = price
                     if pos['last_atr'] > 0:
-                        pos['stop_price'] = pos['high_watermark'] - (STRATEGY_PARAMS['atr_mult'] * pos['last_atr'])
+                        pos['stop_price'] = pos['high_watermark'] - (self.strategy_params['atr_mult'] * pos['last_atr'])
                         if pos['stop_price'] > old_stop:
                             print(f"  {symbol}: Stop ratcheted ${old_stop:,.2f} -> ${pos['stop_price']:,.2f}")
                     self.save_state()
@@ -1796,22 +1793,22 @@ class DonchianMultiCoinBot:
                 sell_reason = None
                 if pos['stop_price'] > 0 and price <= pos['stop_price']:
                     sell_reason = f'Trailing stop hit (${pos["stop_price"]:,.2f}) — intra-day monitor'
-                elif price <= pos['entry_price'] * (1 - EMERGENCY_STOP_PCT / 100):
-                    sell_reason = f'Emergency stop ({EMERGENCY_STOP_PCT}%) — intra-day monitor'
+                elif price <= pos['entry_price'] * (1 - self.emergency_stop_pct / 100):
+                    sell_reason = f'Emergency stop ({self.emergency_stop_pct}%) — intra-day monitor'
 
                 if not sell_reason:
                     gain_pct = ((price - pos['entry_price']) / pos['entry_price']) * 100
-                    if pos['partials_taken'] == 0 and gain_pct >= STRATEGY_PARAMS['tp1_pct']:
-                        self.execute_sell(symbol, price, f'Partial TP1 (+{STRATEGY_PARAMS["tp1_pct"]}%) — intra-day',
-                                          fraction=STRATEGY_PARAMS['tp1_fraction'])
+                    if pos['partials_taken'] == 0 and gain_pct >= self.strategy_params['tp1_pct']:
+                        self.execute_sell(symbol, price, f'Partial TP1 (+{self.strategy_params["tp1_pct"]}%) — intra-day',
+                                          fraction=self.strategy_params['tp1_fraction'])
                         pos['partials_taken'] = 1
-                        pos['remaining_fraction'] *= (1 - STRATEGY_PARAMS['tp1_fraction'])
+                        pos['remaining_fraction'] *= (1 - self.strategy_params['tp1_fraction'])
                         continue
-                    elif pos['partials_taken'] == 1 and gain_pct >= STRATEGY_PARAMS['tp2_pct']:
-                        self.execute_sell(symbol, price, f'Partial TP2 (+{STRATEGY_PARAMS["tp2_pct"]}%) — intra-day',
-                                          fraction=STRATEGY_PARAMS['tp2_fraction'])
+                    elif pos['partials_taken'] == 1 and gain_pct >= self.strategy_params['tp2_pct']:
+                        self.execute_sell(symbol, price, f'Partial TP2 (+{self.strategy_params["tp2_pct"]}%) — intra-day',
+                                          fraction=self.strategy_params['tp2_fraction'])
                         pos['partials_taken'] = 2
-                        pos['remaining_fraction'] *= (1 - STRATEGY_PARAMS['tp2_fraction'])
+                        pos['remaining_fraction'] *= (1 - self.strategy_params['tp2_fraction'])
                         continue
 
                 if sell_reason:
@@ -1828,7 +1825,7 @@ class DonchianMultiCoinBot:
                     old_stop = pos['stop_price']
                     pos['high_watermark'] = price
                     if pos['last_atr'] > 0:
-                        pos['stop_price'] = pos['high_watermark'] - (FUTURES_LONG_STRATEGY_PARAMS['atr_mult'] * pos['last_atr'])
+                        pos['stop_price'] = pos['high_watermark'] - (self.futures_long_strategy_params['atr_mult'] * pos['last_atr'])
                         if pos['stop_price'] > old_stop:
                             print(f"  {symbol} FL: Stop ratcheted ${old_stop:,.2f} -> ${pos['stop_price']:,.2f}")
                     self.save_state()
@@ -1837,26 +1834,26 @@ class DonchianMultiCoinBot:
                 sell_reason = None
                 if pos['stop_price'] > 0 and price <= pos['stop_price']:
                     sell_reason = f'Trailing stop hit (${pos["stop_price"]:,.2f}) — intra-day monitor'
-                elif price <= pos['entry_price'] * (1 - FUTURES_LONG_EMERGENCY_STOP_PCT / 100):
-                    sell_reason = f'Emergency stop ({FUTURES_LONG_EMERGENCY_STOP_PCT}%) — intra-day monitor'
+                elif price <= pos['entry_price'] * (1 - self.futures_long_emergency_stop_pct / 100):
+                    sell_reason = f'Emergency stop ({self.futures_long_emergency_stop_pct}%) — intra-day monitor'
 
                 if not sell_reason:
                     gain_pct = ((price - pos['entry_price']) / pos['entry_price']) * 100
-                    if pos['partials_taken'] == 0 and gain_pct >= FUTURES_LONG_STRATEGY_PARAMS['tp1_pct']:
+                    if pos['partials_taken'] == 0 and gain_pct >= self.futures_long_strategy_params['tp1_pct']:
                         self.execute_futures_long_close(symbol, price,
-                                                        f'Futures Long Partial TP1 (+{FUTURES_LONG_STRATEGY_PARAMS["tp1_pct"]}%) — intra-day',
-                                                        fraction=FUTURES_LONG_STRATEGY_PARAMS['tp1_fraction'])
+                                                        f'Futures Long Partial TP1 (+{self.futures_long_strategy_params["tp1_pct"]}%) — intra-day',
+                                                        fraction=self.futures_long_strategy_params['tp1_fraction'])
                         if symbol in self.positions:
                             self.positions[symbol]['partials_taken'] = 1
-                            self.positions[symbol]['remaining_fraction'] *= (1 - FUTURES_LONG_STRATEGY_PARAMS['tp1_fraction'])
+                            self.positions[symbol]['remaining_fraction'] *= (1 - self.futures_long_strategy_params['tp1_fraction'])
                         continue
-                    elif pos['partials_taken'] == 1 and gain_pct >= FUTURES_LONG_STRATEGY_PARAMS['tp2_pct']:
+                    elif pos['partials_taken'] == 1 and gain_pct >= self.futures_long_strategy_params['tp2_pct']:
                         self.execute_futures_long_close(symbol, price,
-                                                        f'Futures Long Partial TP2 (+{FUTURES_LONG_STRATEGY_PARAMS["tp2_pct"]}%) — intra-day',
-                                                        fraction=FUTURES_LONG_STRATEGY_PARAMS['tp2_fraction'])
+                                                        f'Futures Long Partial TP2 (+{self.futures_long_strategy_params["tp2_pct"]}%) — intra-day',
+                                                        fraction=self.futures_long_strategy_params['tp2_fraction'])
                         if symbol in self.positions:
                             self.positions[symbol]['partials_taken'] = 2
-                            self.positions[symbol]['remaining_fraction'] *= (1 - FUTURES_LONG_STRATEGY_PARAMS['tp2_fraction'])
+                            self.positions[symbol]['remaining_fraction'] *= (1 - self.futures_long_strategy_params['tp2_fraction'])
                         continue
 
                 if sell_reason:
@@ -1874,7 +1871,7 @@ class DonchianMultiCoinBot:
                     old_stop = pos['stop_price']
                     pos['low_watermark'] = price
                     if pos['last_atr'] > 0:
-                        pos['stop_price'] = pos['low_watermark'] + (SHORT_STRATEGY_PARAMS['atr_mult'] * pos['last_atr'])
+                        pos['stop_price'] = pos['low_watermark'] + (self.short_strategy_params['atr_mult'] * pos['last_atr'])
                         if pos['stop_price'] < old_stop:
                             print(f"  {symbol}: Short stop ratcheted ${old_stop:,.2f} -> ${pos['stop_price']:,.2f}")
                     self.save_state()
@@ -1883,26 +1880,26 @@ class DonchianMultiCoinBot:
                 sell_reason = None
                 if pos['stop_price'] > 0 and price >= pos['stop_price']:
                     sell_reason = f'Short trailing stop hit (${pos["stop_price"]:,.2f}) — intra-day'
-                elif price >= pos['entry_price'] * (1 + SHORT_EMERGENCY_STOP_PCT / 100):
-                    sell_reason = f'Short emergency stop (+{SHORT_EMERGENCY_STOP_PCT}%) — intra-day'
+                elif price >= pos['entry_price'] * (1 + self.short_emergency_stop_pct / 100):
+                    sell_reason = f'Short emergency stop (+{self.short_emergency_stop_pct}%) — intra-day'
 
                 if not sell_reason:
                     gain_pct = pnl  # already inverted
-                    if pos['partials_taken'] == 0 and gain_pct >= SHORT_STRATEGY_PARAMS['tp1_pct']:
+                    if pos['partials_taken'] == 0 and gain_pct >= self.short_strategy_params['tp1_pct']:
                         self.execute_short_close(symbol, price,
-                                                 f'Short Partial TP1 (-{SHORT_STRATEGY_PARAMS["tp1_pct"]}%) — intra-day',
-                                                 fraction=SHORT_STRATEGY_PARAMS['tp1_fraction'])
+                                                 f'Short Partial TP1 (-{self.short_strategy_params["tp1_pct"]}%) — intra-day',
+                                                 fraction=self.short_strategy_params['tp1_fraction'])
                         if symbol in self.positions:
                             self.positions[symbol]['partials_taken'] = 1
-                            self.positions[symbol]['remaining_fraction'] *= (1 - SHORT_STRATEGY_PARAMS['tp1_fraction'])
+                            self.positions[symbol]['remaining_fraction'] *= (1 - self.short_strategy_params['tp1_fraction'])
                         continue
-                    elif pos['partials_taken'] == 1 and gain_pct >= SHORT_STRATEGY_PARAMS['tp2_pct']:
+                    elif pos['partials_taken'] == 1 and gain_pct >= self.short_strategy_params['tp2_pct']:
                         self.execute_short_close(symbol, price,
-                                                 f'Short Partial TP2 (-{SHORT_STRATEGY_PARAMS["tp2_pct"]}%) — intra-day',
-                                                 fraction=SHORT_STRATEGY_PARAMS['tp2_fraction'])
+                                                 f'Short Partial TP2 (-{self.short_strategy_params["tp2_pct"]}%) — intra-day',
+                                                 fraction=self.short_strategy_params['tp2_fraction'])
                         if symbol in self.positions:
                             self.positions[symbol]['partials_taken'] = 2
-                            self.positions[symbol]['remaining_fraction'] *= (1 - SHORT_STRATEGY_PARAMS['tp2_fraction'])
+                            self.positions[symbol]['remaining_fraction'] *= (1 - self.short_strategy_params['tp2_fraction'])
                         continue
 
                 if sell_reason:
@@ -1919,7 +1916,7 @@ class DonchianMultiCoinBot:
         """Send portfolio summary via Telegram"""
         prices = self.fetch_all_prices()
         equity = self.total_equity(prices)
-        total_return = ((equity - STARTING_CAPITAL) / STARTING_CAPITAL) * 100
+        total_return = ((equity - self.starting_capital) / self.starting_capital) * 100
         pnl_sign = "+" if total_return >= 0 else ""
 
         # Filter statuses
@@ -1968,7 +1965,7 @@ class DonchianMultiCoinBot:
             f"💼 Equity: <b>${equity:,.0f}</b>\n"
             f"{return_emoji} Return: <b>{pnl_sign}{total_return:.1f}%</b>\n"
             f"💵 Cash: ${self.cash:,.0f}\n"
-            f"📊 Positions: {len(self.positions)}/{MAX_POSITIONS} ({longs}L/{fl}FL/{shorts}S)\n"
+            f"📊 Positions: {len(self.positions)}/{self.max_positions} ({longs}L/{fl}FL/{shorts}S)\n"
             f"{filter_lines}\n"
             f"<b>Open Positions:</b>\n{pos_text}\n\n"
             f"🏷 Mode: {'PAPER' if self.paper_trading else 'LIVE'}\n"
@@ -1995,15 +1992,15 @@ class DonchianMultiCoinBot:
         print("DONCHIAN CHANNEL BREAKOUT — TRI-MODE BOT")
         print("=" * 80)
         print(f"Mode: {'PAPER' if self.paper_trading else 'LIVE'} TRADING")
-        print(f"Spot long coins: {', '.join(COIN_UNIVERSE)}")
-        print(f"Futures long coins: {', '.join(FUTURES_LONG_COIN_UNIVERSE)} ({'ON' if self.futures_long_enabled else 'OFF'}, {self.futures_long_leverage}x)")
-        print(f"Short coins: {', '.join(SHORT_COIN_UNIVERSE)}")
-        print(f"Max positions: {MAX_POSITIONS} (shared pool)")
-        print(f"Risk per trade: {RISK_PER_TRADE_PCT}% (spot) / {FUTURES_LONG_RISK_PER_TRADE_PCT}% (FL) / {SHORT_RISK_PER_TRADE_PCT}% (short)")
-        print(f"Spot long trailing: {STRATEGY_PARAMS['atr_mult']}x ATR")
-        print(f"Futures long trailing: {FUTURES_LONG_STRATEGY_PARAMS['atr_mult']}x ATR")
-        print(f"Short trailing: {SHORT_STRATEGY_PARAMS['atr_mult']}x ATR")
-        print(f"Pyramiding: {'ON (+' + str(PYRAMID_GAIN_PCT) + '% / ' + str(PYRAMID_RISK_PCT) + '% risk)' if PYRAMID_ENABLED else 'OFF'}")
+        print(f"Spot long coins: {', '.join(self.coin_universe)}")
+        print(f"Futures long coins: {', '.join(self.futures_long_coin_universe)} ({'ON' if self.futures_long_enabled else 'OFF'}, {self.futures_long_leverage}x)")
+        print(f"Short coins: {', '.join(self.short_coin_universe)}")
+        print(f"Max positions: {self.max_positions} (shared pool)")
+        print(f"Risk per trade: {self.risk_per_trade_pct}% (spot) / {self.futures_long_risk_per_trade_pct}% (FL) / {self.short_risk_per_trade_pct}% (short)")
+        print(f"Spot long trailing: {self.strategy_params['atr_mult']}x ATR")
+        print(f"Futures long trailing: {self.futures_long_strategy_params['atr_mult']}x ATR")
+        print(f"Short trailing: {self.short_strategy_params['atr_mult']}x ATR")
+        print(f"Pyramiding: {'ON (+' + str(self.pyramid_gain_pct) + '% / ' + str(self.pyramid_risk_pct) + '% risk)' if self.pyramid_enabled else 'OFF'}")
         print(f"Bull filter: {'ON' if self.bull_filter_enabled else 'OFF'}")
         print(f"Shorts: {'ON' if self.short_enabled else 'OFF'} (bear filter: {'ON' if self.bear_filter_enabled else 'OFF'})")
         print(f"Config: loaded from Supabase (reloads each daily check)")
@@ -2037,19 +2034,19 @@ class DonchianMultiCoinBot:
         if self.bear_filter_enabled and bear_details.get('btc_close'):
             bear_line = (f"{bear_emoji} Bear filter: <b>{bear_status}</b> "
                          f"(SMA50 ${bear_details.get('sma_50', 0):,.0f} vs SMA200 ${bear_details.get('sma_200', 0):,.0f})\n")
-        pyramid_line = f"📈 Pyramiding: +{PYRAMID_GAIN_PCT}% / {PYRAMID_RISK_PCT}% risk\n" if PYRAMID_ENABLED else ""
+        pyramid_line = f"📈 Pyramiding: +{self.pyramid_gain_pct}% / {self.pyramid_risk_pct}% risk\n" if self.pyramid_enabled else ""
         fl_line = f"🔵 Futures Long: <b>{'ON' if self.futures_long_enabled else 'OFF'}</b> ({self.futures_long_leverage}x leverage)\n"
         short_line = f"🟣 Shorts: <b>{'ON' if self.short_enabled else 'OFF'}</b>\n"
         msg = (
             f"🚀 <b>DONCHIAN BOT STARTED (TRI-MODE)</b>\n"
             f"━━━━━━━━━━━━━━━\n"
             f"📊 Strategy: Donchian Breakout (Daily)\n"
-            f"🛡 Spot long trailing: {STRATEGY_PARAMS['atr_mult']}x ATR\n"
-            f"🔵 FL trailing: {FUTURES_LONG_STRATEGY_PARAMS['atr_mult']}x ATR\n"
-            f"🔻 Short trailing: {SHORT_STRATEGY_PARAMS['atr_mult']}x ATR\n"
-            f"🪙 Spot: {len(COIN_UNIVERSE)} | FL: {len(FUTURES_LONG_COIN_UNIVERSE)} | Short: {len(SHORT_COIN_UNIVERSE)}\n"
+            f"🛡 Spot long trailing: {self.strategy_params['atr_mult']}x ATR\n"
+            f"🔵 FL trailing: {self.futures_long_strategy_params['atr_mult']}x ATR\n"
+            f"🔻 Short trailing: {self.short_strategy_params['atr_mult']}x ATR\n"
+            f"🪙 Spot: {len(self.coin_universe)} | FL: {len(self.futures_long_coin_universe)} | Short: {len(self.short_coin_universe)}\n"
             f"💼 Equity: ${equity:,.0f}\n"
-            f"📈 Positions: {len(self.positions)}/{MAX_POSITIONS} (L:{long_count} FL:{fl_count} S:{short_count})\n"
+            f"📈 Positions: {len(self.positions)}/{self.max_positions} (L:{long_count} FL:{fl_count} S:{short_count})\n"
             f"{pyramid_line}"
             f"{fl_line}"
             f"{short_line}"
@@ -2062,12 +2059,12 @@ class DonchianMultiCoinBot:
 
         # Sync startup to Supabase
         self.sync.sync_event("startup",
-                             f"Tri-mode bot started ({len(COIN_UNIVERSE)}L/{len(FUTURES_LONG_COIN_UNIVERSE)}FL/{len(SHORT_COIN_UNIVERSE)}S coins, "
+                             f"Tri-mode bot started ({len(self.coin_universe)}L/{len(self.futures_long_coin_universe)}FL/{len(self.short_coin_universe)}S coins, "
                              f"{'PAPER' if self.paper_trading else 'LIVE'})",
-                             {"long_coins": COIN_UNIVERSE,
-                              "futures_long_coins": FUTURES_LONG_COIN_UNIVERSE,
-                              "short_coins": SHORT_COIN_UNIVERSE,
-                              "max_positions": MAX_POSITIONS,
+                             {"long_coins": self.coin_universe,
+                              "futures_long_coins": self.futures_long_coin_universe,
+                              "short_coins": self.short_coin_universe,
+                              "max_positions": self.max_positions,
                               "futures_long_enabled": self.futures_long_enabled,
                               "futures_long_leverage": self.futures_long_leverage,
                               "short_enabled": self.short_enabled,
@@ -2113,7 +2110,7 @@ class DonchianMultiCoinBot:
             print("\n\nBot stopped by user")
             self.save_state()
             equity = self.total_equity()
-            total_return = ((equity - STARTING_CAPITAL) / STARTING_CAPITAL) * 100
+            total_return = ((equity - self.starting_capital) / self.starting_capital) * 100
             long_count = sum(1 for p in self.positions.values() if p.get('side', 'LONG') == 'LONG')
             fl_count = sum(1 for p in self.positions.values() if p.get('side') == 'FUTURES_LONG')
             short_count = sum(1 for p in self.positions.values() if p.get('side') == 'SHORT')
@@ -2150,12 +2147,141 @@ class DonchianMultiCoinBot:
 
 
 # ============================================================================
+# BOT MANAGER — multi-user orchestrator
+# ============================================================================
+
+class BotManager:
+    """Manages multiple UserBot instances, one per active user."""
+
+    def __init__(self):
+        self.bots: dict[str, UserBot] = {}
+        self.logger, _ = setup_logging()
+
+    def load_active_users(self):
+        """Query Supabase for bot_config rows where bot_enabled=true."""
+        try:
+            sync = SupabaseSync()
+            if not sync.url or not sync.key:
+                return []
+            import requests as req
+            resp = req.get(
+                f"{sync.url}/rest/v1/bot_config",
+                params={"select": "user_id,trading_mode,bot_enabled", "bot_enabled": "eq.true"},
+                headers={"apikey": sync.key, "Authorization": f"Bearer {sync.key}"},
+                timeout=10,
+            )
+            if resp.status_code == 200:
+                return resp.json()
+            self.logger.warning(f"[MANAGER] Failed to load users: {resp.status_code}")
+            return []
+        except Exception as e:
+            self.logger.warning(f"[MANAGER] Failed to load users: {e}")
+            return []
+
+    def refresh_bots(self):
+        """Add bots for new active users, remove bots for disabled users."""
+        users = self.load_active_users()
+        active_ids = {u["user_id"] for u in users}
+
+        # Add new users
+        for user_row in users:
+            uid = user_row["user_id"]
+            if uid not in self.bots:
+                try:
+                    mode = user_row.get("trading_mode", "paper")
+                    paper = mode != "live"
+                    self.bots[uid] = UserBot(user_id=uid, paper_trading=paper)
+                    self.logger.info(f"[MANAGER] Created bot for user {uid[:8]} (mode={mode})")
+                except Exception as e:
+                    self.logger.error(f"[MANAGER] Failed to create bot for {uid[:8]}: {e}")
+
+        # Remove disabled users
+        for uid in list(self.bots.keys()):
+            if uid not in active_ids:
+                self.logger.info(f"[MANAGER] Removing bot for disabled user {uid[:8]}")
+                try:
+                    self.bots[uid].save_state()
+                except Exception:
+                    pass
+                del self.bots[uid]
+
+    def run(self):
+        """Main loop: refresh users, run daily checks and trailing stops."""
+        print("=" * 80)
+        print("DONCHIAN CHANNEL BREAKOUT — MULTI-USER BOT MANAGER")
+        print("=" * 80)
+        print(f"Daily check: {DAILY_CHECK_HOUR:02d}:{DAILY_CHECK_MINUTE:02d} UTC")
+        print(f"Stop check: every {STOP_CHECK_INTERVAL // 60} min")
+        print("=" * 80)
+
+        self.refresh_bots()
+        print(f"Active bots: {len(self.bots)}")
+
+        last_daily_check = None
+        last_summary = {}
+        last_user_refresh = time.time()
+
+        try:
+            while True:
+                now = datetime.now(timezone.utc)
+
+                # Refresh user list every 5 min
+                if time.time() - last_user_refresh > 300:
+                    self.refresh_bots()
+                    last_user_refresh = time.time()
+
+                # Daily signal check (once per day at configured time)
+                if (now.hour == DAILY_CHECK_HOUR and
+                        now.minute >= DAILY_CHECK_MINUTE and
+                        last_daily_check != now.date()):
+                    for uid, bot in self.bots.items():
+                        try:
+                            bot.load_remote_config()
+                            bot.daily_check()
+                        except Exception as e:
+                            self.logger.error(f"[MANAGER] Daily check failed for {uid[:8]}: {e}")
+                    last_daily_check = now.date()
+
+                # Daily summary at 20:00 UTC
+                if now.hour == 20:
+                    for uid, bot in self.bots.items():
+                        if last_summary.get(uid) != now.date():
+                            try:
+                                bot.send_daily_summary()
+                                last_summary[uid] = now.date()
+                            except Exception as e:
+                                self.logger.error(f"[MANAGER] Summary failed for {uid[:8]}: {e}")
+
+                # Trailing stop monitoring for bots with positions
+                for uid, bot in self.bots.items():
+                    if bot.positions:
+                        try:
+                            bot.check_trailing_stops()
+                        except Exception as e:
+                            self.logger.error(f"[MANAGER] Stop check failed for {uid[:8]}: {e}")
+
+                # Sleep until next check
+                next_check_min = STOP_CHECK_INTERVAL // 60
+                print(f"\nNext check in {next_check_min} min... ({len(self.bots)} active bots)")
+                time.sleep(STOP_CHECK_INTERVAL)
+
+        except KeyboardInterrupt:
+            print("\n\nBot manager stopped by user")
+            for uid, bot in self.bots.items():
+                try:
+                    bot.save_state()
+                except Exception:
+                    pass
+            print(f"Saved state for {len(self.bots)} bots")
+
+
+# ============================================================================
 # ENTRY POINT
 # ============================================================================
 
 def main():
-    bot = DonchianMultiCoinBot(paper_trading=True)
-    bot.run()
+    manager = BotManager()
+    manager.run()
 
 
 if __name__ == "__main__":

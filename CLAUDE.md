@@ -4,7 +4,7 @@
 
 This is an **automated crypto trading bot** that paper-trades 8 coins on daily candles using a Donchian Channel Breakout strategy. Built by Jason Nichol. The system was originally regime-based (hourly), but pivoted to daily breakouts after Coinbase fees destroyed hourly profitability. Runs 24/7 on AWS EC2.
 
-## Current Status (Feb 28, 2026)
+## Current Status (Mar 3, 2026)
 
 - **Production:** Tri-mode Donchian bot running on EC2 (184.72.84.30) in `screen -S donchian`
 - **Strategy:** Tri-mode Donchian Breakout (daily) — Spot Long + Futures Long + Futures Short
@@ -12,6 +12,7 @@ This is an **automated crypto trading bot** that paper-trades 8 coins on daily c
 - **Tri-mode bot deployed (Feb 28):** Spot Long + Futures Long (CFM perps, 1-3x leverage) + Futures Short
 - **Supabase sync deployed (Feb 27):** Bot syncs trades/positions to TradeSavvy dashboard
 - **TradeSavvy tri-mode UI deployed (Feb 28):** Dashboard fully supports all 3 modes
+- **Platform Telegram bot deployed (Mar 2):** One-click Connect via deep-link, granular notification toggles
 - **Bull filter:** Entries only when BTC > SMA(200). Currently BEAR. (Relaxed from golden cross — dead zone analysis showed +16.6% improvement)
 - **Bear filter:** Short entries when SMA(50) < SMA(200) AND BTC < SMA(200) (death cross). Currently ACTIVE.
 - **Long coins (spot):** BTC, ETH, SOL, XRP, SUI, LINK, ADA, NEAR (8 coins)
@@ -23,7 +24,8 @@ This is an **automated crypto trading bot** that paper-trades 8 coins on daily c
 - **Walk-forward OOS:** +4.9% return, 1.60 PF, 70% WR, 8.2% DD (vs baseline -3.2%)
 - **Portfolio:** $10K paper, max 4 concurrent positions (shared pool across all 3 modes), 2% risk per trade
 - **Monitoring:** Daily signal check at 00:15 UTC, trailing stops every 30 min
-- **Telegram:** All trades + daily summary at 20:00 UTC
+- **Telegram:** Platform bot with granular toggles (trade entries, daily summaries, signal alerts) at 20:00 UTC
+- **Signal tracking overhauled (Mar 3):** Quality gates (R:R>=1.0, entry within 20%, no entry==SL), per-TF dedup, SL/TP-based resolution
 - **GitHub:** `jasondnichol/ResearchAgent` (pushed, API keys scrubbed from history)
 - **Legacy hourly bot:** Stopped on EC2, code still in repo for reference
 
@@ -113,11 +115,11 @@ Coinbase CFM API → Perp Futures ────── Futures Long + Short Execut
 | `williams_r_strategy.py` | Williams %R signal generation (legacy) |
 | `adx_momentum_strategy.py` | ADX Momentum signal generation (legacy) |
 | `bb_reversion_strategy.py` | BB Mean Reversion signal generation (legacy) |
-| `notify.py` | Telegram notifications + file logging |
+| `notify.py` | Telegram notifications (platform bot + per-user + legacy .env) + file logging |
 | `strategy_library.json` | All approved strategies (current + legacy) |
 | `research_agent_v2.py` | Claude API strategy research |
 | `cache_daily/` | Cached daily candles per coin |
-| `.env` | API keys (CLAUDE_API_KEY, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, API_KEY, API_SECRET_FILE) |
+| `.env` | API keys (CLAUDE_API_KEY, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, PLATFORM_TELEGRAM_BOT_TOKEN, API_KEY, API_SECRET_FILE) |
 | `STRATEGY_GUIDE.md` | Complete strategy explanation (plain English) |
 
 ## Deployment
@@ -138,7 +140,7 @@ Coinbase CFM API → Perp Futures ────── Futures Long + Short Execut
 - **Python 3.14** with venv
 - **Libraries:** pandas, numpy, requests, python-dotenv, anthropic, coinbase-advanced-py
 - **APIs:** Coinbase Public API (spot market data), Coinbase Advanced API (futures, authenticated), Claude API (research only)
-- **Notifications:** Telegram Bot API
+- **Notifications:** Telegram Bot API (platform bot `@TradeSavvyBot` + per-user fallback)
 - **Hosting:** AWS EC2 t3.small, Ubuntu 24.04
 - **Source control:** GitHub (jasondnichol/ResearchAgent)
 
@@ -187,9 +189,10 @@ Backtests use 0.45% per side (conservative for $1K-$10K tier).
 9. ~~Phase F3: Tri-mode bot~~ **DEPLOYED** — Spot Long + Futures Long + Futures Short on EC2 (Feb 28, 2026)
 10. ~~TradeSavvy tri-mode UI~~ **DEPLOYED** — All pages support 3 modes with side filtering (Feb 28, 2026)
 11. ~~Futures Long bot logic~~ **DEPLOYED** — Same Donchian breakout as spot, via CFM perps with 1-3x leverage (Feb 28, 2026)
-12. **Monitor tri-mode** — Observe short signals in bear market, validate futures long when bull returns
-12. Evaluate selective coin swaps (e.g., DOGE for NEAR) after paper trading validation
-13. Consider live trading with $1,000-$2,000 after validation
+12. ~~Platform Telegram bot~~ **DEPLOYED** — One-click Connect, granular notification toggles, webhook flow (Mar 2, 2026)
+13. **Monitor tri-mode** — Observe short signals in bear market, validate futures long when bull returns
+14. Evaluate selective coin swaps (e.g., DOGE for NEAR) after paper trading validation
+15. Consider live trading with $1,000-$2,000 after validation
 
 ## Important Rules
 
@@ -209,7 +212,7 @@ Backtests use 0.45% per side (conservative for $1K-$10K tier).
   - Demo account: demo@tradesavvy.io / demo123 (settings locked, daily reset via GitHub Actions)
   - Portfolio page with Coinbase + CoinGecko live prices
   - Strategy page: fully configurable exit rules, position sizing, pyramiding with server-side validation + per-tab Reset Defaults
-  - Settings: notification toggles, email/password update, Coinbase/Telegram setup guides
+  - Settings: one-click Telegram Connect via platform bot, granular notification toggles (trade entries, daily summaries, signal alerts), email/password update, Coinbase setup guide
   - Local dev: `C:\tradesavvy` (frontend :3000, backend :8000)
 - **TradingBot:** Original bot at C:\TradingBot (superseded by this project)
 

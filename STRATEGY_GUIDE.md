@@ -1,32 +1,44 @@
-# ResearchAgent Strategy Guide
+# TradeSavvy Trading System — Complete Strategy Guide
 
-A complete, plain-English explanation of how this trading system works.
+A complete, plain-English explanation of how this trading system works, its current configuration, and projected returns.
 
----
-
-## What This System Does
-
-ResearchAgent is an automated crypto trading bot that paper-trades on Coinbase. It runs three modes simultaneously: **Spot Long** (buy breakouts on spot), **Futures Long** (buy breakouts via leveraged perpetual futures), and **Futures Short** (sell breakdowns via perpetual futures). It watches 8 coins on daily candles, waits for breakout/breakdown signals, enters positions with strict risk management, and exits via trailing stops or partial profit-taking. Everything runs 24/7 on an AWS EC2 server with Telegram alerts for every trade.
+**Last updated:** March 1, 2026
+**Owner:** Jason Nichol
 
 ---
 
-## The Evolution: Why We Switched Strategies
+## System Overview
+
+The system runs two independent bots on AWS EC2 (184.72.84.30), both paper trading on Coinbase:
+
+1. **Donchian Bot** — Daily candles, tri-mode (Futures Long + Spot Long + Futures Short)
+2. **Intraday Bot** — Hourly candles, MTF Momentum (experimental, proving itself)
+
+All long trading is routed through **Coinbase CFM perpetual futures** (0.06% taker fee) as the primary execution venue, with Coinbase spot (0.50% fee) as a fallback for coins without perps. This all-futures approach is the single biggest return lever — 8x lower fees roughly double net returns.
+
+---
+
+## The Evolution: Why We're Here
 
 ### Phase 1: Hourly Regime-Based Trading (Deprecated)
 
-The original system classified the market into three regimes (Trending, Volatile, Ranging) and ran a different strategy for each:
+The original system classified BTC into three regimes and ran a different strategy for each:
 
-| Regime | Strategy | Logic |
-|--------|----------|-------|
-| Ranging | Williams %R Mean Reversion | Buy oversold bounces in sideways markets |
-| Trending | ADX Momentum Thrust | Ride momentum when trend is strong |
-| Volatile | Bollinger Band Mean Reversion | Buy at lower band when volatility spikes |
+| Regime | Strategy | Result |
+|--------|----------|--------|
+| Ranging | Williams %R Mean Reversion | 54.9% WR, 2.09 PF |
+| Trending | ADX Momentum Thrust | 50% WR, 1.92 PF |
+| Volatile | BB Mean Reversion | 72.7% WR, 1.65 PF |
 
-This worked in backtests but **failed in practice** because of Coinbase fees. Hourly trades averaged only +0.05% gain, but each round-trip cost ~0.60% in fees. The fees were 12x larger than the average trade. A strategy that showed +57% in backtest turned into -99% with realistic fees.
+Looked great in backtests — **failed in practice** because Coinbase fees (~0.60% round-trip) were 12x larger than the average hourly trade gain of ~0.05%. A +57% backtest turned into -99% with realistic fees.
 
 ### Phase 2: Daily Donchian Breakout (Current)
 
-We pivoted to a daily-timeframe breakout strategy that holds for weeks, not hours. With average gains of +25.8% per winning trade, the 0.45% fee per side is negligible. This strategy is **regime-agnostic** -- it doesn't need to classify the market. It simply waits for confirmed breakouts with volume.
+Pivoted to daily timeframe. Average winning trade: +25.8% gain over 21-day hold. The 0.90% round-trip fee is negligible. The strategy waits for confirmed breakouts on strong volume and rides trends with a trailing stop.
+
+### Phase 3: Optimization (Feb-Mar 2026)
+
+Added pyramiding (+15% trigger), 4x ATR trailing stops, partial profit-taking, futures execution, and short-side trading. Optimized risk to 4% per trade. Combined result: +385% over 4 years on backtest.
 
 ---
 
@@ -34,360 +46,277 @@ We pivoted to a daily-timeframe breakout strategy that holds for weeks, not hour
 
 ### The Core Idea
 
-The Donchian Channel tracks the highest high and lowest low over a lookback period. When price breaks above the 20-day high on strong volume, it signals institutional buying and the start of a potential trend. We ride that trend with a trailing stop that locks in gains as price moves up.
+The Donchian Channel tracks the highest high and lowest low over a lookback period. When price breaks above the 20-day high on strong volume, it signals institutional buying and the start of a potential trend. We ride that trend with a trailing stop that locks in gains.
 
-### Entry Conditions (ALL must be true)
+### Three Trading Modes
 
-1. **Bull market filter**: BTC must be above its 200-day SMA AND the 50-day SMA must be above the 200-day SMA (golden cross). This is a macro gate -- if BTC isn't in a bull market, no entries are taken on any coin.
-2. **Breakout**: Today's close is above the previous 20-day Donchian high
-3. **Volume confirmation**: Today's volume is > 1.5x the 20-day average volume
-4. **Trend filter**: Price is above the 21-day EMA (we only buy in uptrends)
+| Mode | Priority | Exchange | Fees | Risk | When Active |
+|------|----------|----------|------|------|-------------|
+| **Futures Long** | 1st (primary) | Coinbase CFM Perps | 0.06%/side | 4% per trade | BTC > SMA(200) |
+| **Spot Long** | 2nd (fallback) | Coinbase Spot | 0.50%/side | 4% per trade | BTC > SMA(200), coins without perps |
+| **Futures Short** | 3rd | Coinbase CFM Perps | 0.06%/side | 2% per trade | Death cross (SMA50 < SMA200 + BTC < SMA200) |
 
-The bull filter is the most important improvement. Walk-forward testing showed the strategy lost -9.4% in out-of-sample 2025-2026 without it, but only -3.2% with it (and the remaining losses came from the few bull windows that quickly reversed). Over the full 4-year period, the filter improved profit factor from 1.45 to 1.72 and cut max drawdown from 20% to 15% while maintaining returns.
+Futures long is checked **first** in the daily loop. It claims position slots at 0.06% fees. Spot long only fires for coins not already entered via futures (currently just NEAR, which has no perp). Shorts only activate during confirmed bear markets.
 
-The volume filter is also critical. Without it, returns drop from +46.4% to +18.7%. Volume confirms that the breakout has real institutional participation behind it, not just a random spike.
+---
 
-### Exit Conditions (any one triggers a sell)
+## Entry Rules
 
-1. **Trailing stop (primary exit)**: Price drops below the high watermark minus 4x ATR(14). As price rises, the stop ratchets up but never moves down. The wider 4x multiplier (upgraded from 3x in Phase 3) lets winners run longer while still protecting gains.
+### Long Entry (Futures Long + Spot Long)
 
-2. **Donchian exit channel**: Price closes below the 10-day low. This catches trend reversals that the trailing stop might miss.
+ALL conditions must be true:
 
-3. **Emergency stop**: Price drops 15% below entry. A hard floor to limit catastrophic losses.
+1. **Bull filter**: BTC daily close > 200-day SMA
+2. **Breakout**: Close > previous 20-day Donchian high
+3. **Volume**: Volume > 1.5x 20-day average
+4. **Trend**: Price > 21-day EMA
 
-### Blow-Off Top Detection
+### Short Entry (Futures Short)
 
-If volume spikes above 3x average AND RSI exceeds 80, the stop tightens from 4x ATR to 1.5x ATR. This captures the bulk of a parabolic move while exiting before the inevitable crash. Blow-off tops in crypto are common and can give back 50%+ of gains in days.
+ALL conditions must be true:
 
-### Partial Profit Taking
+1. **Bear filter (death cross)**: BTC SMA(50) < SMA(200) AND BTC close < SMA(200)
+2. **Breakdown**: Close < previous 10-day Donchian low
+3. **Volume**: Volume > 2.0x 20-day average (higher threshold than longs)
+4. **Trend**: Price < 21-day EMA
 
-Instead of all-or-nothing exits, we scale out in three stages:
+---
+
+## Exit Rules
+
+### Long Exits (any one triggers)
+
+| Exit | Rule | Purpose |
+|------|------|---------|
+| **Trailing stop** | Price < high watermark - 4x ATR(14) | Primary exit, locks in gains |
+| **Donchian exit** | Close < 10-day low | Catches trend reversals |
+| **Emergency stop** | Price < entry - 15% | Hard floor for catastrophic moves |
+| **Blow-off detection** | Volume > 3x avg AND RSI > 80 → tighten stop to 1.5x ATR | Captures parabolic tops |
+
+### Short Exits (any one triggers)
+
+| Exit | Rule | Purpose |
+|------|------|---------|
+| **Trailing stop** | Price > low watermark + 2x ATR(14) | Primary exit (inverted) |
+| **Donchian exit** | Close > 15-day high | Catches trend reversals |
+| **Emergency stop** | Price > entry + 15% | Hard floor |
+| **Max hold** | 30 days | Prevents stale positions |
+
+### Partial Profit Taking (Both Sides)
 
 | Level | Trigger | Action |
 |-------|---------|--------|
-| TP1 | +10% gain | Sell 25% of position |
-| TP2 | +20% gain | Sell 25% of position |
+| TP1 | +10% gain (or -10% for shorts) | Sell 25% of position |
+| TP2 | +20% gain (or -20% for shorts) | Sell 25% of position |
 | Runner | Trailing stop hit | Sell remaining 50% |
 
-This locks in some profit early while keeping exposure to larger moves.
+---
 
-### Pyramiding (Adding to Winners)
+## Pyramiding (Adding to Winners)
 
-When an existing position is up +15% AND making a new 20-day Donchian high, the bot adds a second tranche. This only happens once per position, and only when the bull filter is active.
+When a long position gains +15% AND price makes a new 20-day high:
+
+- Add a **1% risk tranche** (smaller than the initial 4% entry)
+- Maximum 1 pyramid add per position
+- Only during bull market (bull filter active)
+- Enabled for both futures longs and spot longs
+- **Not enabled for shorts** (insufficient live validation)
+
+Impact: Pyramiding boosted returns from +47.9% to +80.9% and improved PF from 1.72 to 2.73 in full-period backtest.
+
+---
+
+## Position Sizing & Capital
+
+| Parameter | Current Value |
+|-----------|---------------|
+| Starting capital | $10,000 |
+| Max concurrent positions | 4 (shared across ALL modes) |
+| Long risk per trade | 4% of equity |
+| Short risk per trade | 2% of equity |
+| Pyramid risk per add | 1% of equity |
+| Futures leverage | 1x (no amplification) |
+
+**How sizing works**: If equity is $10,000 and risk is 4%, you're risking $400 per trade. If the stop is 5% below entry, position size = $400 / 0.05 = $8,000. Wider stops = smaller positions, tighter stops = larger positions. This normalizes risk across different volatility levels.
+
+---
+
+## Position Conflicts & Priorities
+
+### The Shared Pool
+
+All 3 modes compete for the same 4 position slots. This prevents over-leveraging.
+
+### Conflict Rule
+
+A coin can only have ONE position across all modes. BTC-PERP-INTX (futures) blocks BTC-USD (spot) and vice versa.
+
+### Daily Check Order (00:15 UTC)
+
+1. **Exits first** — Long exits → Futures long exits → Short exits (free up slots)
+2. **Regime filters** — Compute bull/bear status from BTC indicators
+3. **Futures long pyramiding** (checked first for lower fees)
+4. **Spot long pyramiding** (fallback for spot positions)
+5. **Futures long entries** (checked first — claims slots at 0.06% fees)
+6. **Spot long entries** (fallback — only for coins without perps, e.g. NEAR)
+7. **Short entries** (last — only during confirmed bear market)
+
+### Trailing Stop Checks
+
+Every 30 minutes, the bot fetches current prices and checks all trailing stops, partial TPs, and emergency stops for all 3 modes. This runs independently of the daily signal check.
+
+---
+
+## Regime Filters
+
+### Bull Filter (Gates Long Entries)
+
+- **Rule**: BTC daily close > 200-day SMA
+- **Current status**: BEAR (longs blocked)
+- **When inactive**: No new long entries. Existing positions still managed (stops, TPs work normally)
+- **Impact**: Reduced drawdown from 20% to 15%, improved PF from 1.45 to 1.72
+
+### Bear Filter (Gates Short Entries)
+
+- **Rule**: BTC SMA(50) < SMA(200) AND BTC close < SMA(200) (death cross)
+- **Current status**: ACTIVE (shorts enabled)
+- **More restrictive** than bull filter — requires both MA cross AND price confirmation
+- **Impact**: +15% with death cross vs +6.7% with SMA(200)-only, DD 9% vs 22%
+
+---
+
+## Coins
+
+| Mode | Coins (8 each) |
+|------|----------------|
+| Spot Long | BTC, ETH, SOL, XRP, SUI, LINK, ADA, **NEAR** |
+| Futures Long | BTC, ETH, SOL, XRP, SUI, LINK, ADA, **DOGE** |
+| Futures Short | BTC, ETH, SOL, XRP, SUI, LINK, ADA, DOGE |
+
+NEAR trades spot only (no Coinbase perp). DOGE trades futures only (replaced NEAR in perp lists). 7 coins overlap — with futures-first priority, they route through perps at lower fees.
+
+---
+
+## Timing
+
+| Event | Time |
+|-------|------|
+| Daily signal check | 00:15 UTC (15 min after daily candle close) |
+| Trailing stop checks | Every 30 minutes |
+| Daily summary (Telegram) | 20:00 UTC (noon PST) |
+| Config reload from Supabase | Every daily check + every stop check loop |
+
+---
+
+## Return Projections ($10,000 Starting Capital)
+
+### 4-Year Backtest (2022-2025)
+
+| Metric | Value |
+|--------|-------|
+| Long side (futures, 4% risk) | +370% |
+| Short side (futures, 2% risk) | +15% |
+| **Combined** | **+385%** ($10K → $48.5K) |
+| CAGR | 48.4% |
+| Max drawdown | ~26% |
+| Win rate | ~65-79% |
+| Profit factor | ~2.5 |
+
+### 10-Year Compound Projection
+
+| Year | Start | Net Gain | End | Monthly |
+|------|-------|----------|-----|---------|
+| 1 | $10,000 | $4,840 | $14,840 | $403/mo |
+| 2 | $14,840 | $6,105 | $20,945 | $509/mo |
+| 3 | $20,945 | $8,617 | $29,562 | $718/mo |
+| 4 | $29,562 | $12,162 | $41,724 | $1,014/mo |
+| 5 | $41,724 | $17,166 | $58,890 | $1,430/mo |
+| 6 | $58,890 | $24,228 | $83,118 | $2,019/mo |
+| 7 | $83,118 | $34,195 | $117,313 | $2,850/mo |
+| 8 | $117,313 | $48,263 | $165,575 | $4,022/mo |
+| 9 | $165,575 | $68,118 | $233,694 | $5,677/mo |
+| 10 | $233,694 | $96,143 | $329,837 | $8,012/mo |
+
+*Assumes 15% tax on gains over $5K. Bear years will be flat/slightly positive; bull years drive the majority of returns.*
+
+---
+
+## The Intraday Bot (Separate, Experimental)
+
+Runs alongside the Donchian bot in a separate screen session (`screen -S intraday`). Completely independent capital pool.
 
 | Parameter | Value |
 |-----------|-------|
-| Trigger | Position up +15% AND new 20-day high |
-| Add-on risk | 1% of equity |
-| Size | Calculated from 4x ATR stop distance, capped at 50% of remaining cash |
-| Max adds | 1 per position |
-
-Pyramiding was the single biggest improvement in Phase 3 backtesting. Over the full 4-year period, it boosted returns from +47.9% to +80.9% (with 4x ATR) and improved PF from 1.72 to 2.73. In out-of-sample testing, it turned a -3.2% loss into a +4.9% gain.
-
-### Position Sizing and Risk Management
-
-- **Risk per trade**: 2% of portfolio equity
-- **Position size**: Calculated from stop distance. If the stop is 4x ATR below entry, the position is sized so that getting stopped out loses exactly 2% of equity.
-- **Max concurrent positions**: 4 out of 8 coins
-- **Cash reserve**: Always keeps 5% cash available
-
-### Bull Market Filter (BTC Macro Gate)
-
-The bot checks two conditions on BTC before allowing any new entries across all coins:
-
-1. **BTC close > 200-day SMA** -- BTC is in a long-term uptrend
-2. **BTC 50-day SMA > 200-day SMA** -- The golden cross confirms sustained bullish momentum
-
-If either condition is false, the bot sits on the sidelines. No new positions are opened. Existing positions are unaffected -- trailing stops and exits still work normally.
-
-This filter exists because breakout strategies work in bull markets and get chopped up in bear markets. Over our 4-year BTC dataset, about 52% of days qualified as "bull" by this definition. The filter blocked 145 of 248 potential entries, keeping only the 66 highest-conviction trades.
-
-**Impact on backtest results:**
-
-| Metric | Without Filter | With Filter |
-|--------|---------------|-------------|
-| Trades | 103 | 66 |
-| Win Rate | 38.8% | 43.9% |
-| Profit Factor | 1.45 | 1.72 |
-| Total Return | +46.4% | +47.9% |
-| Max Drawdown | 20.1% | 14.9% |
-| Sharpe Ratio | 0.31 | 0.37 |
-
-Fewer trades, better win rate, higher profit factor, lower drawdown, and slightly higher returns. The filter removes bad trades without removing good ones.
-
-### Futures Long Mode
-
-The Futures Long mode uses the **exact same entry and exit logic** as Spot Long, but executes trades via Coinbase CFM perpetual futures instead of spot orders. This allows applying leverage (1-3x, configurable via the TradeSavvy dashboard) to amplify returns.
-
-| Feature | Spot Long | Futures Long |
-|---------|-----------|-------------|
-| Entry signal | Same | Same |
-| Exit logic | Same | Same |
-| Pyramiding | 1% risk add | 1% risk add * leverage |
-| Position sizing | 2% risk | 2% risk * leverage |
-| Exchange | Coinbase Spot | Coinbase CFM Perps |
-| Leverage | 1x (fixed) | 1-3x (configurable) |
-| Bull filter | Required | Required + `futures_long_enabled` |
-| Coins | BTC, ETH, SOL, XRP, SUI, LINK, ADA, NEAR | BTC, ETH, SOL, XRP, SUI, LINK, ADA, DOGE |
-
-Futures long is off by default. Users opt in via the TradeSavvy dashboard. Leverage starts at 1x and is hard-capped at 3x in the bot code. The leverage setting is read from Supabase before each daily check.
-
-### Coins Traded
-
-| Coin | 4-Year Backtest | Status |
-|------|----------------|--------|
-| SOL | +190%, 50% WR | Keep |
-| SUI | +173%, 50% WR | Keep |
-| BTC | +78%, 44% WR | Keep |
-| ETH | +38%, 53% WR | Keep |
-| LINK | +30%, 36% WR | Keep |
-| ADA | +14%, 43% WR | Keep |
-| XRP | -7%, 50% WR | Keep |
-| NEAR | -15%, 22% WR | Keep |
-| AVAX | -67%, 11% WR | Dropped |
-| HBAR | -87%, 0% WR | Dropped |
-
-HBAR and AVAX were removed due to consistently poor performance across the full 4-year period.
+| Strategy | MTF Momentum — daily trend + hourly RSI dip + volume |
+| ADX gate | Only trades when BTC daily ADX >= 25 (trending) |
+| Coins | 8 altcoins (excludes BTC), max 3 positions |
+| Risk | 1.5% per trade, 2x leverage |
+| Fees | Futures (0.06%/side) |
+| Backtest | +69% over 12 months, PF 1.65, $108/day avg |
+| Status | Paper trading, not yet in TradeSavvy dashboard |
 
 ---
 
-## Bot Architecture
+## Backtesting Summary
 
-### Tri-Mode Design
+### Strategy Approval Criteria
 
-The bot operates three trading modes simultaneously:
+| Path | Style | Requirements |
+|------|-------|-------------|
+| Path A | Mean reversion | 55%+ WR AND 1.5+ PF |
+| Path B | Trend following | 1.8+ PF AND avg_win/avg_loss >= 1.5 AND 10+ trades |
 
-| Mode | Market | Filter | Direction | Exchange |
-|------|--------|--------|-----------|----------|
-| **Spot Long** | Bull (golden cross) | BTC > SMA(200), SMA(50) > SMA(200) | Buy breakouts | Coinbase Spot |
-| **Futures Long** | Bull (golden cross) | Same as spot + `futures_long_enabled` | Buy breakouts via perps | Coinbase CFM (1-3x leverage) |
-| **Futures Short** | Bear (death cross) | SMA(50) < SMA(200), BTC < SMA(200) | Sell breakdowns via perps | Coinbase CFM |
+### Key Backtest Results
 
-All three modes share a pool of max 4 concurrent positions. A coin can only have one position across all modes.
-
-### Dual-Loop Design
-
-```
-00:15 UTC   Daily signal check (fetch 60 candles per coin, compute all indicators, check entries/exits)
-00:45 UTC   Trailing stop check (fetch current prices, update high/low watermarks, check stops)
-01:15 UTC   Trailing stop check
-...         (every 30 minutes)
-23:45 UTC   Trailing stop check
-00:15 UTC   Next daily signal check
-```
-
-The **daily check** flow:
-1. Spot long exits → Futures long exits → Short exits
-2. Regime filters (bull + bear)
-3. Spot long pyramiding → Futures long pyramiding
-4. Spot long entries → Futures long entries → Short entries
-
-The **trailing stop check** (every 30 minutes) is lightweight: fetches only the current price from Coinbase's ticker endpoint, updates the high/low watermark if price has moved, and checks if any stop or take-profit level has been hit for all three modes.
-
-### State Persistence
-
-The bot saves its state (positions, cash, P&L) to `bot_state.json` after every trade. If the bot crashes or the server reboots, it reloads this file on startup and continues where it left off. No positions are lost.
-
-### Telegram Notifications
-
-Every trade action sends a formatted message to Telegram:
-- **Startup**: strategy info, equity, bull filter status
-- **BUY**: coin, price, position size, stop level
-- **SELL / PARTIAL SELL**: entry, exit, P&L percentage and dollar amount, hold duration
-- **Daily summary**: sent at 20:00 UTC (noon PST) with portfolio value, open positions, and bull filter status
-
----
-
-## Market Regime Detection (Legacy System)
-
-The regime classifier still exists in `market_regime.py` but is not used by the Donchian bot. It's kept for reference and potential future use.
-
-### How It Works
-
-Uses Wilder's Exponential Moving Average (EWM with alpha=1/period) to compute ADX(14), ATR(14), SMA(20), and SMA(50) on price data.
-
-### Classification Rules
-
-| Regime | Condition |
-|--------|-----------|
-| **Trending** | ADX > 25 AND price shows clear direction (close > SMA20 > SMA50 for uptrend, or close < SMA20 < SMA50 for downtrend) |
-| **Volatile** | ATR/close > 3% (daily) or > 0.5% (hourly) |
-| **Ranging** | Everything else |
-
-### 4-Year BTC Distribution
-
-- Trending: 37.1% of days
-- Volatile: 44.6% of days
-- Ranging: 18.3% of days
-
----
-
-## Backtesting
-
-### How We Validate Strategies
-
-Every strategy must pass a 4-year backtest on historical data (Feb 2022 -- Feb 2026) before being approved for paper trading. The backtest includes realistic transaction costs (0.45% per side for Coinbase).
-
-### Approval Criteria (Two Paths)
-
-| Path | Target Style | Requirements |
-|------|-------------|--------------|
-| **Path A** | Mean reversion | 55%+ win rate AND 1.5+ profit factor |
-| **Path B** | Trend following | 1.8+ profit factor AND avg win/avg loss >= 1.5 AND 10+ trades |
-
-The Donchian strategy was validated across 10 coins simultaneously: 103 trades, 38.8% win rate, 1.45 profit factor, +46.4% total return with fees included. With the bull filter: 66 trades, 43.9% win rate, 1.72 profit factor, +47.9% return.
-
-### Walk-Forward Validation
-
-To check for overfitting, we split the data into train (2022-2024) and test (2025-2026) periods. The strategy parameters were frozen from the training period -- no re-optimization on out-of-sample data.
-
-| Period | Trades | WR | PF | Return | MaxDD | Sharpe |
-|--------|--------|-----|------|--------|-------|--------|
-| Train 2022-2024 (no filter) | 70 | 42.9% | 2.26 | +67.0% | 16.0% | 0.72 |
-| Test 2025-2026 (no filter) | 39 | 30.8% | 0.74 | -9.4% | 20.1% | -0.60 |
-| Train 2022-2024 (bull filter) | 44 | 50.0% | 2.98 | +63.5% | 12.8% | 0.80 |
-| Test 2025-2026 (bull filter) | 16 | 43.8% | 0.78 | -3.2% | 12.5% | -0.60 |
-
-The out-of-sample period (2025-2026) was a challenging bear/sideways market for crypto. The bull filter correctly kept us mostly sidelined (only 16 entries vs 39 without it) and reduced losses from -9.4% to -3.2%. The strategy isn't overfit to noise -- it's genuinely a bull market strategy, and the filter ensures it only trades in its ideal conditions.
-
-### Slippage Stress Test
-
-We tested the strategy with increasing slippage to find the breaking point:
-
-| Slippage | Total Cost/Side | Return | PF |
-|----------|----------------|--------|-----|
-| 0.00% | 0.40% | +47.7% | 1.46 |
-| 0.10% | 0.50% | +44.5% | 1.43 |
-| 0.20% | 0.60% | +40.4% | 1.39 |
-| 0.30% | 0.70% | +36.7% | 1.35 |
-| 0.50% | 0.90% | +29.5% | 1.28 |
-
-The strategy remains profitable at all tested slippage levels, even at 0.90% total cost per side. With realistic 0.20% slippage, returns are +40.4%. Transaction costs are not a risk for this strategy.
-
-### Phase 3: Pyramiding & Exit Tuning
-
-Tested 7 variants combining pyramiding (add to winners at +15%) and exit tuning (4x ATR trailing stop) on top of the bull filter baseline.
-
-**Full Period (2022-2026):**
-
-| Variant | Trades | WR | PF | Return | MaxDD |
-|---------|--------|-----|------|--------|-------|
-| Baseline (bull filter) | 66 | 43.9% | 1.72 | +47.9% | 14.9% |
-| 4x ATR trailing | 60 | 46.7% | 1.95 | +36.4% | 11.8% |
+| Test | Trades | WR | PF | Return | MaxDD |
+|------|--------|-----|------|--------|-------|
+| Baseline (bull filter only) | 66 | 43.9% | 1.72 | +47.9% | 14.9% |
 | 4x ATR + pyramid | 90 | 64.4% | 2.73 | +80.9% | 13.8% |
+| Walk-forward OOS | 20 | 70.0% | 1.60 | +4.9% | 8.2% |
+| Short (death cross) | 16 | 62.5% | 2.73 | +15.0% | 9.0% |
+| Combined long+short | — | — | — | +110.4% | 13.2% |
 
-**Out-of-Sample (2025-2026):**
+### What Was Tested and Rejected
 
-| Variant | Trades | WR | PF | Return | MaxDD |
-|---------|--------|-----|------|--------|-------|
-| Baseline (bull filter) | 16 | 43.8% | 0.78 | -3.2% | 12.5% |
-| 4x ATR trailing | 13 | 53.8% | 1.15 | +1.2% | 6.4% |
-| **4x ATR + pyramid** | **20** | **70.0%** | **1.60** | **+4.9%** | **8.2%** |
-
-The 4x ATR + pyramid variant was selected for production. It flipped the OOS from -3.2% loss to +4.9% gain while cutting drawdown from 12.5% to 8.2%.
-
-### Entry Filter Tests (Weekly MTF + ADX Conviction)
-
-Tested adding weekly multi-timeframe confirmation (weekly close > 21-week EMA) and ADX conviction filters (ADX > 22 or > 25) on top of the Phase 3 winner. **Neither improved OOS performance.**
-
-| Variant | Full Period | OOS Return | OOS PF |
-|---------|------------|------------|--------|
-| Baseline (4x ATR + pyramid) | +80.9% | +4.9% | 1.60 |
-| + Weekly MTF | +55.7% | +3.8% | 1.47 |
-| + ADX > 22 | +48.5% | -2.4% | 0.74 |
-| + Weekly MTF + ADX > 22 | +35.6% | -2.4% | 0.74 |
-
-The existing entry filters (volume confirmation + EMA trend + bull filter) already capture signal quality effectively. ADX hurt performance because breakouts often start when ADX is low (the trend is just beginning). Adding more filters on a strategy with 66-90 trades just starved it of opportunities.
-
-### Coin Expansion Test (Phase 4)
-
-Screened 16 candidate coins on Coinbase. Several showed strong individual results (SEI +231%, FET +145%, SHIB +141%, DOGE +103%), but expanding the portfolio from 8 to 18 coins actually **hurt performance**:
-
-| Universe | Full Period | OOS Return | OOS PF | OOS MaxDD |
-|----------|------------|------------|--------|-----------|
-| Current 8 coins | +82.1% | +3.5% | 1.38 | 9.2% |
-| Expanded 18 coins | +77.3% | -2.7% | 0.76 | 9.1% |
-
-With max 4 concurrent positions, more coins create competition for position slots rather than more opportunities. New coins sometimes displaced better-performing incumbents. Every OOS trade from a new coin was a loser. **The current 8-coin universe was confirmed as optimal.**
-
-Coins tested but not added: DOGE, DOT, LTC, UNI, ATOM, AAVE, FIL, SHIB, FET, OP, INJ, APT, ARB, SEI, TIA, RENDER. Coins with too little Coinbase history to test: BNB, TON, HYPE (all listed in late 2025/2026).
-
-### Key Backtest Files
-
-| File | Purpose |
-|------|---------|
-| `backtest_donchian_daily.py` | 4-year multi-coin Donchian backtest |
-| `backtest_walkforward.py` | Walk-forward validation + slippage stress test |
-| `backtest_bull_filter.py` | Bull filter backtest + walk-forward revalidation |
-| `backtest_phase3.py` | Phase 3 pyramiding + exit tuning variants |
-| `backtest_filters.py` | Entry filter tests (weekly MTF + ADX conviction) |
-| `backtest_coin_expansion.py` | Phase 4 coin expansion screening |
-| `regime_backtester.py` | Regime-specific backtesting (hourly, legacy) |
-| `cache_daily/` | Cached daily candles per coin |
+| Test | Result | Why |
+|------|--------|-----|
+| Weekly MTF entry filter | Reduced OOS returns | Over-filtered, starved opportunities |
+| ADX conviction filter | Negative OOS | Breakouts start when ADX is low |
+| 18-coin expansion | -2.7% OOS vs +3.5% | Position slot competition |
+| Ranging overlay (hourly) | All 10 variants PF < 1.0 | No viable mean reversion on crypto hourly |
+| Multi-market (NQ, ES, forex) | All negative OOS | Crypto momentum is unique |
+| 15-minute timeframe | All 216 configs negative | Too noisy |
+| Hybrid core/satellite | +92% vs bot +111% | Bull filter protects better than buy-and-hold |
 
 ---
 
-## Coinbase Fee Structure
+## Fee Structure
 
-Fees were the reason we abandoned hourly trading. Here's the full picture:
+| Venue | Taker Fee | Used For |
+|-------|-----------|----------|
+| Coinbase CFM Perps | 0.06%/side | Futures longs + shorts (primary) |
+| Coinbase Spot ($1K-$10K tier) | 0.50%/side | Spot longs (fallback, NEAR only) |
 
-| Monthly Volume | Taker Fee | Maker Fee |
-|---------------|-----------|-----------|
-| < $1K | 1.20% | 0.60% |
-| $1K -- $10K | 0.75% | 0.35% |
-| $10K -- $50K | 0.40% | 0.25% |
-
-We use 0.45% per side in backtests (conservative estimate for $1K-$10K tier). A round-trip trade costs ~0.90%, which is negligible on trades averaging +25.8% gain but devastating on trades averaging +0.05% gain.
+The switch from spot to futures for long entries is the single biggest optimization lever: ~8x lower fees roughly doubles net returns over 4 years.
 
 ---
 
 ## Infrastructure
 
-### Tech Stack
-- **Language**: Python 3.14
-- **Libraries**: pandas, numpy, requests, python-dotenv, anthropic
-- **Data**: Coinbase Public API (no authentication needed for market data)
-- **AI Research**: Claude API (for strategy research, not used in trading)
-- **Notifications**: Telegram Bot API
-- **Hosting**: AWS EC2 t3.small, Ubuntu 24.04
-
-### Deployment
-- **Local dev**: `C:\ResearchAgent` on Windows 11
-- **Production**: `/home/ubuntu/ResearchAgent` on EC2
-- **Process**: SCP files to EC2, restart bot in `screen -S donchian`
-- **Source control**: GitHub (`jasondnichol/ResearchAgent`)
-
-### Key Files
-
-| File | Purpose |
-|------|---------|
-| `donchian_multicoin_bot.py` | Production bot — tri-mode (runs 24/7 on EC2) |
-| `donchian_breakout_strategy.py` | Donchian signal generation (long + short) |
-| `coinbase_futures.py` | Coinbase CFM perpetual futures client |
-| `supabase_sync.py` | Supabase sync for TradeSavvy dashboard |
-| `notify.py` | Telegram notifications + file logging |
-| `market_regime.py` | Regime classifier (legacy, kept for reference) |
-| `strategy_library.json` | All approved strategies (current + legacy) |
-| `integrated_switcher.py` | Old hourly regime-switching bot (deprecated) |
-| `.env` | API keys (never committed to git) |
+| Component | Details |
+|-----------|---------|
+| Language | Python 3.14, venv |
+| Hosting | AWS EC2 t3.small, Ubuntu 24.04 |
+| Dashboard | TradeSavvy (tradesavvy.io) — React + FastAPI + Supabase |
+| Notifications | Telegram Bot API (per-user config) |
+| Data | Coinbase Public API (market data), Coinbase CFM API (futures) |
+| Source | GitHub: jasondnichol/ResearchAgent + jasondnichol/tradesavvy |
 
 ---
 
-## What's Next
+## Important Rules
 
-1. Monitor tri-mode paper trading (Spot Long + Futures Long + Futures Short)
-2. ~~Phase 3: Pyramiding + exit tuning~~ **DONE** — 4x ATR + pyramid deployed (Feb 26, 2026)
-3. ~~Phase 4: Coin expansion~~ **TESTED** — 16 candidates screened, current 8 coins confirmed optimal
-4. ~~Entry filters (weekly MTF, ADX)~~ **TESTED** — Neither improved OOS performance
-5. ~~Futures integration (F1-F4)~~ **DONE** — Tri-mode bot deployed with TradeSavvy UI (Feb 28, 2026)
-6. Evaluate selective coin swaps (e.g., DOGE for NEAR) after paper trading validation
-7. Consider live trading with $1,000-$2,000 after validation
-
----
-
-## Rules
-
-- **Paper trading only** until 30-day validation is complete
+- **Paper trading only** until validation is complete
 - **Never switch to live** without explicit owner approval
-- **Never commit API keys** to git
+- **Never commit API keys** to git (use .env + load_dotenv)
 - **Always test locally** before deploying to EC2
