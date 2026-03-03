@@ -30,7 +30,7 @@ import pandas as pd
 from datetime import datetime, timezone, timedelta
 from donchian_breakout_strategy import DonchianBreakoutStrategy
 from coinbase_futures import CoinbaseFuturesClient, SPOT_TO_PERP, PERP_TO_SPOT
-from notify import send_telegram, send_telegram_user, setup_logging
+from notify import send_telegram, send_telegram_user, send_telegram_platform, setup_logging
 from supabase_sync import SupabaseSync
 
 # ============================================================================
@@ -326,6 +326,8 @@ class DonchianMultiCoinBot:
             self.telegram_bot_token = config.get("telegram_bot_token", "")
             self.telegram_chat_id = config.get("telegram_chat_id", "")
             self.notify_telegram = config.get("notify_telegram", True)
+            self.notify_trade_entries = config.get("notify_trade_entries", True)
+            self.notify_daily_summary = config.get("notify_daily_summary", True)
 
             # ── Recreate strategy instances with updated params ──
             self.strategies = {sym: DonchianBreakoutStrategy(STRATEGY_PARAMS) for sym in COIN_UNIVERSE}
@@ -349,12 +351,19 @@ class DonchianMultiCoinBot:
     # NOTIFICATIONS
     # ------------------------------------------------------------------
 
-    def send_notification(self, message):
-        """Send Telegram using per-user creds if configured, else fall back to .env."""
+    def send_notification(self, message, category="trade"):
+        """Send Telegram with category-based filtering.
+        category: 'trade' (entries/exits), 'summary' (daily/startup)."""
         if not self.notify_telegram:
             return
-        if self.telegram_bot_token and self.telegram_chat_id:
-            send_telegram_user(message, self.telegram_bot_token, self.telegram_chat_id)
+        if category == "trade" and not getattr(self, 'notify_trade_entries', True):
+            return
+        if category == "summary" and not getattr(self, 'notify_daily_summary', True):
+            return
+        # Use platform bot with per-user fallback
+        if self.telegram_chat_id:
+            send_telegram_platform(message, self.telegram_chat_id,
+                                   self.telegram_bot_token or None)
         else:
             send_telegram(message)
 
@@ -1965,7 +1974,7 @@ class DonchianMultiCoinBot:
             f"🏷 Mode: {'PAPER' if self.paper_trading else 'LIVE'}\n"
             f"🕐 {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}"
         )
-        self.send_notification(msg)
+        self.send_notification(msg, category="summary")
 
         # Sync equity snapshot to Supabase
         positions_value = equity - self.cash
@@ -2049,7 +2058,7 @@ class DonchianMultiCoinBot:
             f"🏷 Mode: {'PAPER' if self.paper_trading else 'LIVE'}\n"
             f"🕐 {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}"
         )
-        self.send_notification(msg)
+        self.send_notification(msg, category="summary")
 
         # Sync startup to Supabase
         self.sync.sync_event("startup",

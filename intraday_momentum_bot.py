@@ -36,7 +36,7 @@ import numpy as np
 import pandas as pd
 from datetime import datetime, timezone, timedelta
 from coinbase_futures import CoinbaseFuturesClient, SPOT_TO_PERP, PERP_TO_SPOT
-from notify import send_telegram, send_telegram_user, setup_logging
+from notify import send_telegram, send_telegram_user, send_telegram_platform, setup_logging
 from supabase_sync import SupabaseSync
 
 # ============================================================================
@@ -144,15 +144,24 @@ class IntradayMomentumBot:
                 self.telegram_bot_token = config.get("telegram_bot_token", "")
                 self.telegram_chat_id = config.get("telegram_chat_id", "")
                 self.notify_telegram = config.get("notify_telegram", True)
+                self.notify_trade_entries = config.get("notify_trade_entries", True)
+                self.notify_daily_summary = config.get("notify_daily_summary", True)
         except Exception:
             pass
 
-    def send_notification(self, message):
-        """Send Telegram using per-user creds if configured, else fall back to .env."""
+    def send_notification(self, message, category="trade"):
+        """Send Telegram with category-based filtering.
+        category: 'trade' (entries/exits), 'summary' (daily/startup)."""
         if not self.notify_telegram:
             return
-        if self.telegram_bot_token and self.telegram_chat_id:
-            send_telegram_user(message, self.telegram_bot_token, self.telegram_chat_id)
+        if category == "trade" and not getattr(self, 'notify_trade_entries', True):
+            return
+        if category == "summary" and not getattr(self, 'notify_daily_summary', True):
+            return
+        # Use platform bot with per-user fallback
+        if self.telegram_chat_id:
+            send_telegram_platform(message, self.telegram_chat_id,
+                                   self.telegram_bot_token or None)
         else:
             send_telegram(message)
 
@@ -834,7 +843,7 @@ class IntradayMomentumBot:
             f"🏷 Mode: {'PAPER' if self.paper_trading else 'LIVE'} | Strategy: MTF Momentum\n"
             f"🕐 {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}"
         )
-        self.send_notification(msg)
+        self.send_notification(msg, category="summary")
 
     # ------------------------------------------------------------------
     # MAIN LOOP
@@ -878,7 +887,7 @@ class IntradayMomentumBot:
             f"🏷 Mode: {'PAPER' if self.paper_trading else 'LIVE'}\n"
             f"🕐 {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}"
         )
-        self.send_notification(msg)
+        self.send_notification(msg, category="summary")
 
         last_hourly_check = None
         last_summary = None
@@ -925,7 +934,7 @@ class IntradayMomentumBot:
                 f"📊 Trades: {len(self.trades_log)}\n"
                 f"📈 Positions: {len(self.positions)}"
             )
-            self.send_notification(msg)
+            self.send_notification(msg, category="summary")
 
 
 # ============================================================================

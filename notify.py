@@ -11,6 +11,7 @@ load_dotenv()
 # Telegram Configuration
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "1422959932")
+PLATFORM_TELEGRAM_BOT_TOKEN = os.getenv("PLATFORM_TELEGRAM_BOT_TOKEN", "")
 
 # Setup file logging
 def setup_logging(log_dir="logs"):
@@ -68,6 +69,25 @@ def send_telegram_user(message, bot_token, chat_id):
     if not bot_token or not chat_id:
         return False
     url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
+    payload = {"chat_id": chat_id, "text": message, "parse_mode": "HTML"}
+    try:
+        response = requests.post(url, json=payload, timeout=10)
+        if response.status_code == 200:
+            return True
+        else:
+            print(f"⚠️  Telegram error: {response.status_code} - {response.text}")
+            return False
+    except Exception as e:
+        print(f"⚠️  Telegram send failed: {e}")
+        return False
+
+
+def send_telegram_platform(message, chat_id, user_bot_token=None):
+    """Send via platform bot (or per-user bot if set)."""
+    token = user_bot_token or PLATFORM_TELEGRAM_BOT_TOKEN
+    if not token or not chat_id:
+        return False
+    url = f"https://api.telegram.org/bot{token}/sendMessage"
     payload = {"chat_id": chat_id, "text": message, "parse_mode": "HTML"}
     try:
         response = requests.post(url, json=payload, timeout=10)
