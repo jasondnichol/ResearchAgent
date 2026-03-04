@@ -13,6 +13,9 @@ This is an **automated crypto trading bot** that paper-trades 8 coins on daily c
 - **Supabase sync deployed (Feb 27):** Bot syncs trades/positions to TradeSavvy dashboard
 - **TradeSavvy tri-mode UI deployed (Feb 28):** Dashboard fully supports all 3 modes
 - **Platform Telegram bot deployed (Mar 2):** One-click Connect via deep-link, granular notification toggles
+- **Multi-user beta prep (Mar 3):** RLS migration, signup/reset (hidden), admin roles, key encryption, webhook security
+- **Backtester deployed (Mar 3):** Full Donchian engine, admin-only, custom date ranges, 3-tier caching
+- **Signup hidden:** Link removed from auth page until beta launch ready
 - **Bull filter:** Entries only when BTC > SMA(200). Currently BEAR. (Relaxed from golden cross — dead zone analysis showed +16.6% improvement)
 - **Bear filter:** Short entries when SMA(50) < SMA(200) AND BTC < SMA(200) (death cross). Currently ACTIVE.
 - **Long coins (spot):** BTC, ETH, SOL, XRP, SUI, LINK, ADA, NEAR (8 coins)
@@ -191,8 +194,12 @@ Backtests use 0.45% per side (conservative for $1K-$10K tier).
 11. ~~Futures Long bot logic~~ **DEPLOYED** — Same Donchian breakout as spot, via CFM perps with 1-3x leverage (Feb 28, 2026)
 12. ~~Platform Telegram bot~~ **DEPLOYED** — One-click Connect, granular notification toggles, webhook flow (Mar 2, 2026)
 13. **Monitor tri-mode** — Observe short signals in bear market, validate futures long when bull returns
-14. Evaluate selective coin swaps (e.g., DOGE for NEAR) after paper trading validation
-15. Consider live trading with $1,000-$2,000 after validation
+14. ~~Backtester~~ **DEPLOYED** — Full Donchian engine in TradeSavvy, admin-only, custom date ranges (Mar 3, 2026)
+15. ~~Multi-user beta prep~~ **PARTIAL** — RLS, signup/reset, admin roles, key encryption done. Bot refactor pending. (Mar 3, 2026)
+16. **Multi-tenant bot refactor** — UserBot + BotManager (largest remaining beta task)
+17. **Re-enable signup** — When beta launch ready
+18. Evaluate selective coin swaps (e.g., DOGE for NEAR) after paper trading validation
+19. Consider live trading with $1,000-$2,000 after validation
 
 ## Important Rules
 
