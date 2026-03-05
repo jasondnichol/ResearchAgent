@@ -19,10 +19,11 @@ logger = logging.getLogger("tradingbot")
 class SupabaseSync:
     """Syncs bot state to Supabase via direct REST API calls."""
 
-    def __init__(self, user_id: str = None):
+    def __init__(self, user_id: str = None, strategy: str = "donchian"):
         self.url = os.getenv("SUPABASE_URL", "").rstrip("/")
         self.key = os.getenv("SUPABASE_SERVICE_KEY", "")
         self.user_id = user_id or os.getenv("SUPABASE_USER_ID", "")
+        self.strategy = strategy
         self.rest_url = f"{self.url}/rest/v1" if self.url else ""
         self.headers = {
             "apikey": self.key,
@@ -32,7 +33,7 @@ class SupabaseSync:
         }
         self.enabled = bool(self.url and self.key and self.user_id)
         if self.enabled:
-            logger.info("[SUPABASE] Sync enabled")
+            logger.info(f"[SUPABASE] Sync enabled (strategy={self.strategy})")
         else:
             logger.warning("[SUPABASE] Sync disabled — missing URL, key, or user_id")
 
@@ -131,6 +132,7 @@ class SupabaseSync:
         side = position.get("side", "LONG")
         data = {
             "user_id": self.user_id,
+            "strategy": self.strategy,
             "symbol": symbol,
             "side": side,
             "entry_price": position["entry_price"],
@@ -162,12 +164,14 @@ class SupabaseSync:
             "hold_days": position.get("hold_days", 0),
         }
         return self._patch("positions", data,
-                           filters={"user_id": self.user_id, "symbol": symbol})
+                           filters={"user_id": self.user_id, "symbol": symbol,
+                                    "strategy": self.strategy})
 
     def sync_position_close(self, symbol):
         """Delete the position row after a full SELL."""
         return self._delete("positions",
-                            filters={"user_id": self.user_id, "symbol": symbol})
+                            filters={"user_id": self.user_id, "symbol": symbol,
+                                     "strategy": self.strategy})
 
     # ------------------------------------------------------------------
     # TRADE HISTORY
@@ -180,6 +184,7 @@ class SupabaseSync:
         """Insert a row into trade_history for every trade action."""
         data = {
             "user_id": self.user_id,
+            "strategy": self.strategy,
             "symbol": symbol,
             "action": action,
             "side": side,
@@ -204,6 +209,7 @@ class SupabaseSync:
         """Insert a daily equity snapshot for charting."""
         data = {
             "user_id": self.user_id,
+            "strategy": self.strategy,
             "equity": round(equity, 2),
             "cash": round(cash, 2),
             "positions_value": round(positions_value, 2),
@@ -221,6 +227,7 @@ class SupabaseSync:
         """Insert a bot event (startup, shutdown, daily_check, trade, error)."""
         data = {
             "user_id": self.user_id,
+            "strategy": self.strategy,
             "event_type": event_type,
             "message": message,
             "metadata": metadata,
@@ -234,7 +241,8 @@ class SupabaseSync:
     def load_config(self):
         """Load strategy config from Supabase. Returns dict or None."""
         rows = self._get("bot_config",
-                         filters={"user_id": self.user_id},
+                         filters={"user_id": self.user_id,
+                                  "strategy": self.strategy},
                          limit=1)
         if rows and len(rows) > 0:
             return rows[0]
