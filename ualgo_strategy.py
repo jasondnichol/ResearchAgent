@@ -337,11 +337,12 @@ def check_ualgo_long_entry(df: pd.DataFrame, params: dict = None) -> dict:
         entry_price = float(cur['close'])
         sl_pct = p['sl_pct'] / 100.0  # convert from % to decimal
         stop_price = entry_price * (1.0 - sl_pct)
-        risk_dist = entry_price - stop_price
+        atr_val = float(cur['atr']) if not np.isnan(cur.get('atr', float('nan'))) else 0
 
-        tp1 = entry_price + 1.0 * risk_dist
-        tp2 = entry_price + 2.0 * risk_dist
-        tp3 = entry_price + 3.0 * risk_dist
+        # ATR-Fibonacci take profit levels
+        tp1 = entry_price + 1.618 * atr_val
+        tp2 = entry_price + 2.618 * atr_val
+        tp3 = entry_price + 3.618 * atr_val
 
         result.update({
             'entry_price': entry_price,
@@ -397,11 +398,12 @@ def check_ualgo_short_entry(df: pd.DataFrame, params: dict = None) -> dict:
         entry_price = float(cur['close'])
         sl_pct = p['short_sl_pct'] / 100.0
         stop_price = entry_price * (1.0 + sl_pct)
-        risk_dist = stop_price - entry_price
+        atr_val = float(cur['atr']) if not np.isnan(cur.get('atr', float('nan'))) else 0
 
-        tp1 = entry_price - 1.0 * risk_dist
-        tp2 = entry_price - 2.0 * risk_dist
-        tp3 = entry_price - 3.0 * risk_dist
+        # ATR-Fibonacci take profit levels (inverted for short)
+        tp1 = entry_price - 1.618 * atr_val
+        tp2 = entry_price - 2.618 * atr_val
+        tp3 = entry_price - 3.618 * atr_val
 
         result.update({
             'entry_price': entry_price,
