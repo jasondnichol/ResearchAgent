@@ -705,15 +705,12 @@ def send_telegram(message):
 
 # ── Main Orchestration ──
 
-def run_optimization_cycle(trigger="manual"):
+def run_optimization_cycle(trigger="manual", existing_run_id=None):
     """Execute one full optimization cycle (both loops)."""
     # Ensure tradesavvy backend is on sys.path for signal imports
     tradesavvy_backend = os.path.join(os.path.dirname(__file__), '..', 'tradesavvy', 'backend')
     if tradesavvy_backend not in sys.path:
         sys.path.insert(0, tradesavvy_backend)
-
-    run_id = f"opt_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}"
-    logger.info(f"Starting optimization cycle {run_id} (trigger={trigger})")
 
     # Get admin user_id from env or look up by email
     user_id = os.getenv("OPTIMIZER_USER_ID", "")
@@ -721,15 +718,21 @@ def run_optimization_cycle(trigger="manual"):
         profile_result = db.select("profiles", columns="id", filters={"email": "jasonnichol@gmail.com"}, limit=1)
         user_id = (profile_result.get("data") or [{}])[0].get("id", "admin")
 
-    # Create run record
-    db.insert("optimization_runs", {
-        "id": run_id,
-        "user_id": user_id,
-        "status": "running",
-        "trigger": trigger,
-        "loop_type": "both",
-    })
+    # Reuse existing queued run or create new one
+    if existing_run_id:
+        run_id = existing_run_id
+        db.update("optimization_runs", {"status": "running"}, filters={"id": run_id})
+    else:
+        run_id = f"opt_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}"
+        db.insert("optimization_runs", {
+            "id": run_id,
+            "user_id": user_id,
+            "status": "running",
+            "trigger": trigger,
+            "loop_type": "both",
+        })
 
+    logger.info(f"Starting optimization cycle {run_id} (trigger={trigger})")
     proposals = []
     total_tokens = 0
 
@@ -925,8 +928,7 @@ def main():
             # Check manual trigger
             queued_id = check_manual_trigger()
             if queued_id:
-                db.update("optimization_runs", {"status": "running"}, filters={"id": queued_id})
-                run_optimization_cycle(trigger="manual")
+                run_optimization_cycle(trigger="manual", existing_run_id=queued_id)
 
         except Exception as e:
             logger.error(f"Main loop error: {e}", exc_info=True)
