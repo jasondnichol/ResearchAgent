@@ -62,21 +62,22 @@ class SupabaseDB:
 
     def select(self, table, columns="*", filters=None, gte_filters=None,
                lte_filters=None, order=None, limit=None):
-        url = f"{self.rest_url}/{table}?select={columns}"
+        url = f"{self.rest_url}/{table}"
+        params = {"select": columns}
         if filters:
             for k, v in filters.items():
-                url += f"&{k}=eq.{v}"
+                params[k] = f"eq.{v}"
         if gte_filters:
             for k, v in gte_filters.items():
-                url += f"&{k}=gte.{v}"
+                params[k] = f"gte.{v}"
         if lte_filters:
             for k, v in lte_filters.items():
-                url += f"&{k}=lte.{v}"
+                params[k] = f"lte.{v}"
         if order:
-            url += f"&order={order}"
+            params["order"] = order
         if limit:
-            url += f"&limit={limit}"
-        resp = requests.get(url, headers=self.headers, timeout=15)
+            params["limit"] = str(limit)
+        resp = requests.get(url, headers=self.headers, params=params, timeout=15)
         return {"data": resp.json() if resp.status_code == 200 else []}
 
     def insert(self, table, data):
@@ -140,7 +141,9 @@ def collect_signal_data(days=LOOKBACK_DAYS_SIGNALS):
             by_method[method]["wins"] += 1
         elif outcome == "LOSS":
             by_method[method]["losses"] += 1
-        by_method[method]["returns"].append(float(r.get("price_change_pct", 0)))
+        pct = r.get("price_change_pct")
+        pct = float(pct) if pct is not None else 0.0
+        by_method[method]["returns"].append(pct)
 
         # Track per-version stats
         if cfg_ver is not None:
@@ -152,7 +155,7 @@ def collect_signal_data(days=LOOKBACK_DAYS_SIGNALS):
                 bv[ver_key]["wins"] += 1
             elif outcome == "LOSS":
                 bv[ver_key]["losses"] += 1
-            bv[ver_key]["returns"].append(float(r.get("price_change_pct", 0)))
+            bv[ver_key]["returns"].append(pct)
 
         by_tf.setdefault(tf, {"total": 0, "wins": 0, "losses": 0})
         by_tf[tf]["total"] += 1
@@ -201,22 +204,26 @@ def collect_trade_data(days=LOOKBACK_DAYS_TRADES):
     if not rows:
         return None
 
-    wins = [r for r in rows if r.get("action") in ("SELL", "FUTURES_SELL") and float(r.get("pnl_pct", 0)) > 0]
-    losses = [r for r in rows if r.get("action") in ("SELL", "FUTURES_SELL") and float(r.get("pnl_pct", 0)) <= 0]
+    def _pnl(r):
+        v = r.get("pnl_pct")
+        return float(v) if v is not None else 0.0
+
+    wins = [r for r in rows if r.get("action") in ("SELL", "FUTURES_SELL") and _pnl(r) > 0]
+    losses = [r for r in rows if r.get("action") in ("SELL", "FUTURES_SELL") and _pnl(r) <= 0]
 
     by_coin = {}
     for r in rows:
         coin = r.get("symbol", "unknown")
         by_coin.setdefault(coin, {"total": 0, "pnl_sum": 0})
         by_coin[coin]["total"] += 1
-        by_coin[coin]["pnl_sum"] += float(r.get("pnl_pct", 0))
+        by_coin[coin]["pnl_sum"] += _pnl(r)
 
     return {
         "total": len(rows),
         "closed_trades": len(wins) + len(losses),
         "wins": len(wins),
         "losses": len(losses),
-        "avg_return": round(sum(float(r.get("pnl_pct", 0)) for r in rows) / max(1, len(rows)), 2),
+        "avg_return": round(sum(_pnl(r) for r in rows) / max(1, len(rows)), 2),
         "by_coin": by_coin,
         "recent_trades": rows[:20],
     }
@@ -234,6 +241,25 @@ def get_current_config(target):
         rows = result.get("data") or []
         return rows[0].get("config", {}) if rows else {}
     return {}
+
+
+def get_rejected_proposals(target):
+    """Fetch recently rejected proposals for a target (to avoid re-proposing)."""
+    try:
+        result = db.select(
+            "optimization_proposals",
+            columns="proposed_changes,change_rationale,rejection_reason,approved_at",
+            filters={"target": target, "status": "rejected"},
+            order="approved_at.desc",
+            limit=5,
+        )
+        rows = result.get("data") or []
+        return [{"changes": r.get("proposed_changes", {}),
+                 "rationale": r.get("change_rationale", ""),
+                 "rejection_reason": r.get("rejection_reason", ""),
+                 "rejected_at": r.get("approved_at", "")} for r in rows]
+    except Exception:
+        return []
 
 
 def get_config_history(methodology):
@@ -267,6 +293,7 @@ def build_signal_analysis_prompt(data, config, methodology):
     method_data = data["by_methodology"].get(methodology, {})
     losses = [l for l in data.get("loss_details", []) if l.get("methodology") == methodology]
     history = get_config_history(methodology)
+    rejected = get_rejected_proposals(f"signal_config_{methodology}")
 
     # Build per-version performance breakdown
     by_version = method_data.get("by_version", {})
@@ -286,13 +313,22 @@ def build_signal_analysis_prompt(data, config, methodology):
         for h in history:
             history_lines += f"- v{h['version']} ({h['created_at'][:10]}): {h['reason']} — {json.dumps(h['changes'])}\n"
 
+    # Build rejected proposals section
+    rejected_lines = ""
+    if rejected:
+        rejected_lines = "\n## Previously Rejected Proposals\nThese changes were proposed and REJECTED by the admin. Do NOT re-propose the same changes unless you have significantly stronger evidence.\n"
+        for r in rejected:
+            rejected_lines += f"- Rejected ({r['rejected_at'][:10] if r['rejected_at'] else 'unknown'}): {json.dumps(r['changes'])}\n"
+            if r.get("rejection_reason"):
+                rejected_lines += f"  Reason: {r['rejection_reason']}\n"
+
     return f"""You are an expert crypto trading signal optimizer. Analyze the performance data for the {method_display} signal methodology and propose parameter improvements.
 
 ## Current Configuration
 ```json
 {json.dumps(config, indent=2)}
 ```
-{history_lines}
+{history_lines}{rejected_lines}
 ## Performance Data (Last {LOOKBACK_DAYS_SIGNALS} Days)
 - Total signals: {method_data.get('total', 0)}
 - Wins: {method_data.get('wins', 0)}, Losses: {method_data.get('losses', 0)}
@@ -333,6 +369,15 @@ Return ONLY the JSON, no other text."""
 
 def build_donchian_analysis_prompt(data, config):
     """Build Claude prompt for Donchian bot tuning."""
+    rejected = get_rejected_proposals("donchian_config")
+    rejected_lines = ""
+    if rejected:
+        rejected_lines = "\n## Previously Rejected Proposals\nThese changes were proposed and REJECTED by the admin. Do NOT re-propose the same changes unless you have significantly stronger evidence.\n"
+        for r in rejected:
+            rejected_lines += f"- Rejected ({r['rejected_at'][:10] if r['rejected_at'] else 'unknown'}): {json.dumps(r['changes'])}\n"
+            if r.get("rejection_reason"):
+                rejected_lines += f"  Reason: {r['rejection_reason']}\n"
+
     return f"""You are an expert crypto trading bot optimizer. Analyze the Donchian breakout bot's trade history and propose parameter improvements.
 
 ## Current Bot Configuration (key parameters)
@@ -350,6 +395,7 @@ def build_donchian_analysis_prompt(data, config):
 }}
 ```
 
+{rejected_lines}
 ## Trade Performance (Last {LOOKBACK_DAYS_TRADES} Days)
 - Total trades: {data.get('total', 0)}
 - Closed: {data.get('closed_trades', 0)} (W: {data.get('wins', 0)}, L: {data.get('losses', 0)})
@@ -669,9 +715,11 @@ def run_optimization_cycle(trigger="manual"):
     run_id = f"opt_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}"
     logger.info(f"Starting optimization cycle {run_id} (trigger={trigger})")
 
-    # Get admin user_id (first row in bot_config)
-    user_result = db.select("bot_config", columns="user_id", limit=1)
-    user_id = (user_result.get("data") or [{}])[0].get("user_id", "admin")
+    # Get admin user_id from env or look up by email
+    user_id = os.getenv("OPTIMIZER_USER_ID", "")
+    if not user_id:
+        profile_result = db.select("profiles", columns="id", filters={"email": "jasonnichol@gmail.com"}, limit=1)
+        user_id = (profile_result.get("data") or [{}])[0].get("id", "admin")
 
     # Create run record
     db.insert("optimization_runs", {
