@@ -756,6 +756,16 @@ class UAlgoUserBot:
             btc_price=btc_price,
         )
 
+        longs = sum(1 for p in self.positions.values() if p.get('side') == 'LONG')
+        fl = sum(1 for p in self.positions.values() if p.get('side') == 'FUTURES_LONG')
+        shorts = sum(1 for p in self.positions.values() if p.get('side') == 'SHORT')
+        self.sync.sync_event("daily_check",
+                             f"UAlgo daily scan: {self._count_positions()}/{self.max_positions} positions ({longs}L/{fl}FL/{shorts}S), "
+                             f"${equity:,.0f} equity, bull={bull_status}, bear={bear_status}",
+                             {"equity": round(equity, 2), "positions": self._count_positions(),
+                              "longs": longs, "futures_longs": fl, "shorts": shorts,
+                              "bull_status": bull_status, "bear_status": bear_status})
+
         print(f"\n[UALGO] Daily check complete. Equity: ${equity:,.2f}")
 
     def _check_daily_exits(self, prices):
@@ -1108,7 +1118,15 @@ class UAlgoBotManager:
                 paper = user['trading_mode'] != 'live'
                 self.logger.info(f"[UALGO] Adding bot for user {uid[:8]}... (paper={paper})")
                 try:
-                    self.bots[uid] = UAlgoUserBot(uid, paper_trading=paper)
+                    bot = UAlgoUserBot(uid, paper_trading=paper)
+                    self.bots[uid] = bot
+                    bot.sync.sync_event('startup', f'UAlgo bot started ({"paper" if paper else "live"})')
+                    bot._notify(
+                        f"🤖 <b>UAlgo Bot Started</b>\n"
+                        f"Mode: {'Paper' if paper else 'Live'}\n"
+                        f"Equity: ${bot.total_equity():,.2f}\n"
+                        f"Positions: {bot._count_positions()}/{bot.max_positions}"
+                    )
                 except Exception as e:
                     self.logger.error(f"[UALGO] Failed to create bot for {uid[:8]}: {e}")
 
