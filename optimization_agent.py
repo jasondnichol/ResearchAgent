@@ -566,6 +566,33 @@ def validate_proposed_changes(changes, target):
 
 # ── Backtest Validation (Donchian loop) ──
 
+def _is_regression(baseline_metrics, proposed_metrics, target):
+    """Check if proposed metrics are worse than baseline. Returns (is_worse, reason)."""
+    if not baseline_metrics or not proposed_metrics:
+        return False, ""  # No metrics to compare — allow through for human review
+
+    if target == "donchian_config":
+        # Donchian: check total_return and profit_factor
+        b_ret = baseline_metrics.get("total_return", 0) or 0
+        p_ret = proposed_metrics.get("total_return", 0) or 0
+        b_pf = baseline_metrics.get("profit_factor", 0) or 0
+        p_pf = proposed_metrics.get("profit_factor", 0) or 0
+        if b_ret == p_ret and b_pf == p_pf:
+            return True, f"Identical metrics (backtest params likely not applied)"
+        if p_ret < b_ret and p_pf < b_pf:
+            return True, f"Return {p_ret:.1f}% < {b_ret:.1f}% AND PF {p_pf:.2f} < {b_pf:.2f}"
+    else:
+        # Signal methods: check win_rate and avg_return
+        b_wr = baseline_metrics.get("win_rate", 0) or 0
+        p_wr = proposed_metrics.get("win_rate", 0) or 0
+        b_ret = baseline_metrics.get("avg_return", 0) or 0
+        p_ret = proposed_metrics.get("avg_return", 0) or 0
+        if p_wr < b_wr and p_ret < b_ret:
+            return True, f"WR {p_wr:.1f}% < {b_wr:.1f}% AND avg return {p_ret:.2f}% < {b_ret:.2f}%"
+
+    return False, ""
+
+
 def run_donchian_backtest(current_config, proposed_changes):
     """Run baseline vs proposed backtest using backtest_engine."""
     try:
@@ -573,26 +600,32 @@ def run_donchian_backtest(current_config, proposed_changes):
         sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'tradesavvy', 'backend'))
         from backtest_engine import run_backtest
 
-        # Baseline
-        baseline_params = {
-            "mode": "combined",
-            "atr_mult": current_config.get("atr_mult", 4.0),
-            "volume_mult": current_config.get("volume_mult", 1.5),
-            "pyramid_trigger": current_config.get("pyramid_gain_pct", 15.0),
-            "risk_per_trade": current_config.get("risk_per_trade_pct", 2.0),
-            "period": "full",
+        # Map optimizer param names → backtest engine param names
+        PARAM_MAP = {
+            "atr_mult": "atr_mult",
+            "volume_mult": "volume_mult",
+            "pyramid_gain_pct": "pyramid_trigger",
+            "risk_per_trade_pct": "risk_per_trade",
+            "short_atr_mult": "short_atr_mult",
+            "short_volume_mult": "short_volume_mult",
+            "tp1_gain_pct": "tp1_gain_pct",
+            "tp2_gain_pct": "tp2_gain_pct",
+            "emergency_stop_pct": "emergency_stop_pct",
         }
+
+        # Baseline
+        baseline_params = {"mode": "combined", "period": "full"}
+        for opt_key, bt_key in PARAM_MAP.items():
+            if opt_key in current_config:
+                baseline_params[bt_key] = current_config[opt_key]
+
         baseline = run_backtest(baseline_params)
 
         # Proposed
         proposed_params = {**baseline_params}
         for k, v in proposed_changes.items():
-            if k in proposed_params:
-                proposed_params[k] = v
-            elif k == "pyramid_gain_pct":
-                proposed_params["pyramid_trigger"] = v
-            elif k == "risk_per_trade_pct":
-                proposed_params["risk_per_trade"] = v
+            bt_key = PARAM_MAP.get(k, k)
+            proposed_params[bt_key] = v
 
         proposed = run_backtest(proposed_params)
 
@@ -757,21 +790,26 @@ def run_optimization_cycle(trigger="manual", existing_run_id=None):
                     baseline_metrics = backtest_result["baseline"] if backtest_result else {}
                     proposed_metrics = backtest_result["proposed"] if backtest_result else {}
 
-                    proposal = {
-                        "run_id": run_id,
-                        "user_id": user_id,
-                        "status": "pending",
-                        "target": "donchian_config",
-                        "proposed_changes": validated,
-                        "change_rationale": ai_result.get("rationale", ""),
-                        "baseline_metrics": baseline_metrics,
-                        "proposed_metrics": proposed_metrics,
-                        "improvement_summary": ai_result.get("expected_impact", ""),
-                        "current_config": current_config,
-                    }
-                    db.insert("optimization_proposals", proposal)
-                    proposals.append(proposal)
-                    logger.info(f"Donchian proposal created: {list(validated.keys())}")
+                    # Regression gate — auto-reject if proposed is worse
+                    is_regression, reason = _is_regression(baseline_metrics, proposed_metrics, "donchian_config")
+                    if is_regression:
+                        logger.info(f"Donchian proposal auto-rejected (regression): {reason}")
+                    else:
+                        proposal = {
+                            "run_id": run_id,
+                            "user_id": user_id,
+                            "status": "pending",
+                            "target": "donchian_config",
+                            "proposed_changes": validated,
+                            "change_rationale": ai_result.get("rationale", ""),
+                            "baseline_metrics": baseline_metrics,
+                            "proposed_metrics": proposed_metrics,
+                            "improvement_summary": ai_result.get("expected_impact", ""),
+                            "current_config": current_config,
+                        }
+                        db.insert("optimization_proposals", proposal)
+                        proposals.append(proposal)
+                        logger.info(f"Donchian proposal created: {list(validated.keys())}")
             elif ai_result:
                 total_tokens += ai_result.get("_token_usage", 0)
                 logger.info("Donchian: No changes proposed (current params optimal)")
@@ -805,26 +843,31 @@ def run_optimization_cycle(trigger="manual", existing_run_id=None):
                     validated, warnings = validate_proposed_changes(changes, target)
 
                     if validated:
-                        # Validate via signal replay (only SMC and PA have replay support)
+                        # Validate via signal replay
                         replay_result = run_signal_replay(methodology, current_config, validated)
                         baseline_metrics = replay_result.get("baseline", {}) if replay_result else {}
                         proposed_metrics = replay_result.get("proposed", {}) if replay_result else {}
 
-                        proposal = {
-                            "run_id": run_id,
-                            "user_id": user_id,
-                            "status": "pending",
-                            "target": target,
-                            "proposed_changes": validated,
-                            "change_rationale": ai_result.get("rationale", ""),
-                            "baseline_metrics": baseline_metrics,
-                            "proposed_metrics": proposed_metrics,
-                            "improvement_summary": ai_result.get("expected_impact", ""),
-                            "current_config": current_config,
-                        }
-                        db.insert("optimization_proposals", proposal)
-                        proposals.append(proposal)
-                        logger.info(f"Signal {methodology} proposal created: {list(validated.keys())}")
+                        # Regression gate — auto-reject if proposed is worse
+                        is_regression, reason = _is_regression(baseline_metrics, proposed_metrics, target)
+                        if is_regression:
+                            logger.info(f"Signal {methodology} proposal auto-rejected (regression): {reason}")
+                        else:
+                            proposal = {
+                                "run_id": run_id,
+                                "user_id": user_id,
+                                "status": "pending",
+                                "target": target,
+                                "proposed_changes": validated,
+                                "change_rationale": ai_result.get("rationale", ""),
+                                "baseline_metrics": baseline_metrics,
+                                "proposed_metrics": proposed_metrics,
+                                "improvement_summary": ai_result.get("expected_impact", ""),
+                                "current_config": current_config,
+                            }
+                            db.insert("optimization_proposals", proposal)
+                            proposals.append(proposal)
+                            logger.info(f"Signal {methodology} proposal created: {list(validated.keys())}")
                 elif ai_result:
                     total_tokens += ai_result.get("_token_usage", 0)
                     logger.info(f"Signal {methodology}: No changes proposed")
