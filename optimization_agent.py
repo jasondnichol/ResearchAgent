@@ -132,14 +132,27 @@ def collect_signal_data(days=LOOKBACK_DAYS_SIGNALS):
         tf = r.get("timeframe", "unknown")
         sym = r.get("symbol", "unknown")
         outcome = r.get("outcome")
+        cfg_ver = r.get("config_version")
 
-        by_method.setdefault(method, {"total": 0, "wins": 0, "losses": 0, "returns": []})
+        by_method.setdefault(method, {"total": 0, "wins": 0, "losses": 0, "returns": [], "by_version": {}})
         by_method[method]["total"] += 1
         if outcome == "WIN":
             by_method[method]["wins"] += 1
         elif outcome == "LOSS":
             by_method[method]["losses"] += 1
         by_method[method]["returns"].append(float(r.get("price_change_pct", 0)))
+
+        # Track per-version stats
+        if cfg_ver is not None:
+            ver_key = str(cfg_ver)
+            bv = by_method[method]["by_version"]
+            bv.setdefault(ver_key, {"total": 0, "wins": 0, "losses": 0, "returns": []})
+            bv[ver_key]["total"] += 1
+            if outcome == "WIN":
+                bv[ver_key]["wins"] += 1
+            elif outcome == "LOSS":
+                bv[ver_key]["losses"] += 1
+            bv[ver_key]["returns"].append(float(r.get("price_change_pct", 0)))
 
         by_tf.setdefault(tf, {"total": 0, "wins": 0, "losses": 0})
         by_tf[tf]["total"] += 1
@@ -160,6 +173,9 @@ def collect_signal_data(days=LOOKBACK_DAYS_SIGNALS):
     for m in by_method.values():
         m["win_rate"] = round(m["wins"] / m["total"] * 100, 1) if m["total"] > 0 else 0
         m["avg_return"] = round(sum(m["returns"]) / len(m["returns"]), 2) if m["returns"] else 0
+        for v in m.get("by_version", {}).values():
+            v["win_rate"] = round(v["wins"] / v["total"] * 100, 1) if v["total"] > 0 else 0
+            v["avg_return"] = round(sum(v["returns"]) / len(v["returns"]), 2) if v["returns"] else 0
 
     return {
         "total": len(resolved),
@@ -220,6 +236,23 @@ def get_current_config(target):
     return {}
 
 
+def get_config_history(methodology):
+    """Fetch config change history for a methodology."""
+    try:
+        result = db.select(
+            "signal_config_history",
+            filters={"methodology": methodology},
+            order="version.asc",
+            limit=20,
+        )
+        rows = result.get("data") or []
+        return [{"version": r["version"], "changes": r.get("changes", {}),
+                 "reason": r.get("reason", ""), "source": r.get("source", ""),
+                 "created_at": r.get("created_at", "")} for r in rows]
+    except Exception:
+        return []
+
+
 # ── AI Analysis ──
 
 def build_signal_analysis_prompt(data, config, methodology):
@@ -233,6 +266,25 @@ def build_signal_analysis_prompt(data, config, methodology):
 
     method_data = data["by_methodology"].get(methodology, {})
     losses = [l for l in data.get("loss_details", []) if l.get("methodology") == methodology]
+    history = get_config_history(methodology)
+
+    # Build per-version performance breakdown
+    by_version = method_data.get("by_version", {})
+    version_lines = ""
+    if by_version:
+        version_lines = "\n## Performance by Config Version\n"
+        for ver, stats in sorted(by_version.items(), key=lambda x: int(x[0])):
+            version_lines += f"- Version {ver}: {stats['total']} signals, {stats['win_rate']}% WR, {stats['avg_return']}% avg return ({stats['wins']}W/{stats['losses']}L)\n"
+        # Find current version
+        current_ver = max(int(v) for v in by_version.keys()) if by_version else 1
+        version_lines += f"\n**Analyze version {current_ver} data only for tuning decisions.** Prior versions are historical context showing impact of past changes.\n"
+
+    # Build change history section
+    history_lines = ""
+    if history:
+        history_lines = "\n## Config Change History\n"
+        for h in history:
+            history_lines += f"- v{h['version']} ({h['created_at'][:10]}): {h['reason']} — {json.dumps(h['changes'])}\n"
 
     return f"""You are an expert crypto trading signal optimizer. Analyze the performance data for the {method_display} signal methodology and propose parameter improvements.
 
@@ -240,27 +292,30 @@ def build_signal_analysis_prompt(data, config, methodology):
 ```json
 {json.dumps(config, indent=2)}
 ```
-
+{history_lines}
 ## Performance Data (Last {LOOKBACK_DAYS_SIGNALS} Days)
 - Total signals: {method_data.get('total', 0)}
 - Wins: {method_data.get('wins', 0)}, Losses: {method_data.get('losses', 0)}
 - Win rate: {method_data.get('win_rate', 0)}%
 - Avg return: {method_data.get('avg_return', 0)}%
-
-## Recent Loss Details
-{json.dumps(losses[:15], indent=2, default=str)}
+{version_lines}
+## Recent Loss Details (current version only)
+{json.dumps([l for l in losses[:15] if not by_version or str(l.get('config_version', '')) == str(max(int(v) for v in by_version.keys()))] or losses[:15], indent=2, default=str)}
 
 ## Root Cause Analysis Guidelines
 - Are stops too tight? (Low stop_loss distances = getting stopped out prematurely)
 - Are entries firing too late? (High confidence thresholds = missing early moves)
 - Are TPs too conservative? (Small take_profit distances = leaving money on table)
 - Is the signal firing too often on noise? (Low confidence gates = false signals)
+- Review change history: do NOT re-propose changes already made in prior versions
+- If a recent version change improved results, acknowledge that and look for remaining issues
 
 ## Constraints
 - Make conservative changes: 10-30% adjustments per parameter
 - Optimize for PROFITABILITY (avg return), not just win rate
 - Only change parameters that address the identified root causes
 - Do NOT change parameters that are performing well
+- Do NOT revert changes from prior versions that showed improvement
 
 ## Output Format
 Return a JSON object with:
@@ -606,6 +661,11 @@ def send_telegram(message):
 
 def run_optimization_cycle(trigger="manual"):
     """Execute one full optimization cycle (both loops)."""
+    # Ensure tradesavvy backend is on sys.path for signal imports
+    tradesavvy_backend = os.path.join(os.path.dirname(__file__), '..', 'tradesavvy', 'backend')
+    if tradesavvy_backend not in sys.path:
+        sys.path.insert(0, tradesavvy_backend)
+
     run_id = f"opt_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}"
     logger.info(f"Starting optimization cycle {run_id} (trigger={trigger})")
 
