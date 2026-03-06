@@ -285,7 +285,6 @@ def build_signal_analysis_prompt(data, config, methodology):
     """Build Claude prompt for signal methodology tuning."""
     method_display = {
         "smc": "Smart Money Concepts",
-        "elliott": "Elliott Wave",
         "priceaction": "Price Action",
         "technical": "Technical Analysis",
     }.get(methodology, methodology)
@@ -485,17 +484,6 @@ SIGNAL_CONFIG_RANGES = {
         "choch_score": (5, 30),
         "conviction_confidence": (40, 90),
         "conviction_rr": (1.0, 5.0),
-    },
-    "elliott": {
-        "confidence_cap": (40, 90),
-        "conviction_rr": (1.0, 5.0),
-        "conviction_min_stop_pct": (0.5, 5.0),
-        "confidence_wave_24_valid": (30, 80),
-        "confidence_wave_24_invalid": (15, 50),
-        "confidence_wave_5plus_valid": (25, 75),
-        "confidence_wave_5plus_invalid": (10, 45),
-        "confidence_wave_13_valid": (20, 70),
-        "confidence_wave_13_invalid": (10, 40),
     },
     "priceaction": {
         "sl_atr_mult": (0.5, 5.0),
@@ -821,7 +809,7 @@ def run_optimization_cycle(trigger="manual", existing_run_id=None):
         signal_data = collect_signal_data()
 
         if signal_data:
-            for methodology in ["smc", "elliott", "priceaction", "technical"]:
+            for methodology in ["smc", "priceaction", "technical"]:
                 method_stats = signal_data["by_methodology"].get(methodology)
                 if not method_stats or method_stats.get("total", 0) < 5:
                     logger.info(f"Signal {methodology}: Not enough data, skipping")
