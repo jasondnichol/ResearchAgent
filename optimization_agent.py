@@ -567,9 +567,12 @@ def validate_proposed_changes(changes, target):
                     warnings.append(f"{param}={value} out of range [{lo}, {hi}], clamped")
                     validated[param] = max(lo, min(hi, value))
             else:
-                validated[param] = value  # non-numeric (e.g., dicts)
+                warnings.append(f"{param}={value} non-scalar, skipped")
         else:
-            validated[param] = value  # not range-checked
+            if isinstance(value, (int, float)):
+                validated[param] = value
+            else:
+                warnings.append(f"{param}={value} non-scalar, skipped")
 
     return validated, warnings
 
