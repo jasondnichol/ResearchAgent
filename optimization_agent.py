@@ -530,6 +530,14 @@ DONCHIAN_CONFIG_RANGES = {
     "tp2_gain_pct": (10.0, 40.0),
     "short_atr_mult": (1.0, 5.0),
     "short_volume_mult": (1.0, 4.0),
+    # Newly exposed (previously hardcoded)
+    "rsi_blowoff": (65, 90),
+    "volume_blowoff": (2.0, 5.0),
+    "atr_mult_tight": (0.5, 3.0),
+    "short_max_hold_days": (15, 60),
+    "pyramid_max_cash": (0.2, 0.8),
+    "short_rsi_blowoff": (10, 35),
+    "short_atr_mult_tight": (0.5, 2.5),
 }
 
 
@@ -922,17 +930,294 @@ def check_manual_trigger():
     return None
 
 
+def run_intensive_optimization(max_rounds=10):
+    """Run multiple optimization rounds using backtests only (no live data needed).
+
+    Each round:
+    1. AI proposes param changes based on current config + history
+    2. Backtest validates on full (4yr) + OOS (2025-2026)
+    3. Auto-apply if BOTH full AND OOS improve (no regression)
+    4. Feed results back for next round
+
+    Stops when: no improvement found, AI says optimal, or max rounds hit.
+    """
+    tradesavvy_backend = os.path.join(os.path.dirname(__file__), '..', 'tradesavvy', 'backend')
+    if tradesavvy_backend not in sys.path:
+        sys.path.insert(0, tradesavvy_backend)
+    from backtest_engine import run_backtest
+
+    logger.info(f"=== INTENSIVE OPTIMIZATION: up to {max_rounds} rounds ===")
+    send_telegram(f"🔬 <b>Intensive Optimization Started</b>\nMax rounds: {max_rounds}\nMode: Backtest-only, auto-apply improvements")
+
+    # Load current config as starting point
+    current_config = get_current_config("donchian_config")
+    if not current_config:
+        current_config = {}
+
+    # PARAM_MAP for translating optimizer names → backtest names
+    PARAM_MAP = {
+        "atr_mult": "atr_mult", "volume_mult": "volume_mult",
+        "pyramid_gain_pct": "pyramid_trigger", "risk_per_trade_pct": "risk_per_trade",
+        "short_atr_mult": "short_atr_mult", "short_volume_mult": "short_volume_mult",
+        "tp1_gain_pct": "tp1_gain_pct", "tp2_gain_pct": "tp2_gain_pct",
+        "emergency_stop_pct": "emergency_stop_pct",
+        "rsi_blowoff": "rsi_blowoff", "volume_blowoff": "volume_blowoff",
+        "atr_mult_tight": "atr_mult_tight", "short_max_hold_days": "short_max_hold_days",
+        "pyramid_max_cash": "pyramid_max_cash", "short_rsi_blowoff": "short_rsi_blowoff",
+        "short_atr_mult_tight": "short_atr_mult_tight",
+    }
+
+    def _build_bt_params(config_overrides=None):
+        """Build backtest params from current config + overrides."""
+        params = {
+            "mode": "combined", "bull_filter": "off", "bear_filter": "death_cross",
+            "long_leverage": 1.0, "short_leverage": 1.0,
+        }
+        for opt_key, bt_key in PARAM_MAP.items():
+            if opt_key in current_config:
+                params[bt_key] = current_config[opt_key]
+        if config_overrides:
+            for k, v in config_overrides.items():
+                bt_key = PARAM_MAP.get(k, k)
+                params[bt_key] = v
+        return params
+
+    def _run_full_and_oos(config_overrides=None):
+        """Run backtest on full + OOS periods. Returns (full_metrics, oos_metrics)."""
+        base = _build_bt_params(config_overrides)
+        full_res = run_backtest({**base, "period": "full"})
+        oos_res = run_backtest({**base, "period": "test"})
+        return (
+            {k: full_res.get(k) for k in ["total_return", "profit_factor", "win_rate", "max_drawdown", "total_trades", "sharpe_ratio"]},
+            {k: oos_res.get(k) for k in ["total_return", "profit_factor", "win_rate", "max_drawdown", "total_trades", "sharpe_ratio"]},
+        )
+
+    # Get baseline metrics
+    baseline_full, baseline_oos = _run_full_and_oos()
+    best_full = baseline_full
+    best_oos = baseline_oos
+    best_config = dict(current_config)
+    round_history = []
+    total_tokens = 0
+    improvements = 0
+
+    logger.info(f"Baseline: Full {baseline_full['total_return']:+.1f}% PF {baseline_full['profit_factor']:.2f} | "
+                f"OOS {baseline_oos['total_return']:+.1f}% PF {baseline_oos['profit_factor']:.2f}")
+
+    for round_num in range(1, max_rounds + 1):
+        logger.info(f"\n--- Round {round_num}/{max_rounds} ---")
+
+        # Build prompt with current best config + history of previous rounds
+        history_text = ""
+        if round_history:
+            history_text = "\n## Previous Rounds This Session\n"
+            for rh in round_history:
+                status = "APPLIED" if rh["applied"] else "REJECTED"
+                history_text += (f"- Round {rh['round']}: {json.dumps(rh['changes'])} → "
+                                 f"Full {rh['proposed_full']['total_return']:+.1f}% PF {rh['proposed_full']['profit_factor']:.2f}, "
+                                 f"OOS {rh['proposed_oos']['total_return']:+.1f}% PF {rh['proposed_oos']['profit_factor']:.2f} "
+                                 f"[{status}: {rh.get('reason', '')}]\n")
+
+        prompt = f"""You are an expert crypto trading bot optimizer running in INTENSIVE BACKTEST MODE.
+Your goal: find the optimal Donchian breakout parameters by proposing changes tested against 4-year historical data.
+
+## Current Best Configuration
+```json
+{json.dumps({k: best_config.get(k, DONCHIAN_CONFIG_RANGES.get(k, [None])) for k in DONCHIAN_CONFIG_RANGES}, indent=2)}
+```
+
+## Current Best Performance
+- Full period (2022-2026): Return {best_full['total_return']:+.1f}%, PF {best_full['profit_factor']:.2f}, WR {best_full['win_rate']:.1f}%, DD {best_full['max_drawdown']:.1f}%, Sharpe {best_full.get('sharpe_ratio', 0):.2f}
+- OOS (2025-2026): Return {best_oos['total_return']:+.1f}%, PF {best_oos['profit_factor']:.2f}, WR {best_oos['win_rate']:.1f}%, DD {best_oos['max_drawdown']:.1f}%
+
+## Baseline (starting point this session)
+- Full: Return {baseline_full['total_return']:+.1f}%, PF {baseline_full['profit_factor']:.2f}
+- OOS: Return {baseline_oos['total_return']:+.1f}%, PF {baseline_oos['profit_factor']:.2f}
+
+{history_text}
+
+## Round {round_num}/{max_rounds} — Strategy
+- This is round {round_num}. {"Start with the most impactful parameters (atr_mult, tp levels, volume_mult)." if round_num <= 3 else "Try fine-tuning blow-off detection, short-side params, or pyramid settings." if round_num <= 6 else "Focus on subtle refinements or combinations not yet tested."}
+- Changes are AUTO-APPLIED if they improve BOTH full AND OOS metrics. No human review.
+- Avoid overfitting: if full improves but OOS gets worse, the change will be rejected.
+- Try 1-3 parameter changes per round. Larger jumps early, smaller refinements later.
+- Bull filter is OFF, bear filter is death_cross — do NOT change these.
+
+## Allowed Ranges
+{json.dumps(DONCHIAN_CONFIG_RANGES, indent=2)}
+
+## Output Format
+Return ONLY a JSON object:
+```json
+{{
+  "proposed_changes": {{"param_name": new_value, ...}},
+  "rationale": "Brief explanation of what you're testing and why",
+  "expected_impact": "What improvement we expect"
+}}
+```
+If you believe current params are optimal: {{"proposed_changes": {{}}, "rationale": "Converged — no further improvements expected"}}"""
+
+        # Get AI proposal
+        ai_result = run_ai_analysis(prompt)
+        if not ai_result:
+            logger.error(f"Round {round_num}: AI analysis failed, stopping")
+            break
+
+        total_tokens += ai_result.get("_token_usage", 0)
+        changes = ai_result.get("proposed_changes", {})
+        rationale = ai_result.get("rationale", "")
+
+        if not changes:
+            logger.info(f"Round {round_num}: AI says optimal — stopping. Rationale: {rationale}")
+            break
+
+        # Validate ranges
+        validated, warnings = validate_proposed_changes(changes, "donchian_config")
+        if warnings:
+            logger.info(f"Round {round_num} warnings: {warnings}")
+
+        if not validated:
+            logger.info(f"Round {round_num}: No valid changes after validation")
+            round_history.append({"round": round_num, "changes": changes, "applied": False,
+                                  "reason": "validation failed", "proposed_full": best_full, "proposed_oos": best_oos})
+            continue
+
+        logger.info(f"Round {round_num}: Testing {json.dumps(validated)} — {rationale}")
+
+        # Run backtest with proposed changes
+        proposed_full, proposed_oos = _run_full_and_oos(validated)
+
+        # Check improvement criteria: BOTH full AND OOS must not regress
+        full_better = (proposed_full["total_return"] >= best_full["total_return"] or
+                       proposed_full["profit_factor"] >= best_full["profit_factor"])
+        oos_better = (proposed_oos["total_return"] >= best_oos["total_return"] or
+                      proposed_oos["profit_factor"] >= best_oos["profit_factor"])
+        oos_not_worse = (proposed_oos["total_return"] >= best_oos["total_return"] - 1.0 and
+                         proposed_oos["max_drawdown"] <= best_oos["max_drawdown"] + 2.0)
+        dd_ok = proposed_full["max_drawdown"] <= best_full["max_drawdown"] + 3.0
+
+        applied = full_better and oos_not_worse and dd_ok
+
+        if applied:
+            improvements += 1
+            # Apply changes to best_config
+            for k, v in validated.items():
+                best_config[k] = v
+            best_full = proposed_full
+            best_oos = proposed_oos
+            reason = "improvement"
+            logger.info(f"Round {round_num}: ✅ APPLIED — Full {proposed_full['total_return']:+.1f}% PF {proposed_full['profit_factor']:.2f} | "
+                        f"OOS {proposed_oos['total_return']:+.1f}% PF {proposed_oos['profit_factor']:.2f}")
+        else:
+            reasons = []
+            if not full_better:
+                reasons.append(f"full not better ({proposed_full['total_return']:+.1f}% vs {best_full['total_return']:+.1f}%)")
+            if not oos_not_worse:
+                reasons.append(f"OOS regressed ({proposed_oos['total_return']:+.1f}% vs {best_oos['total_return']:+.1f}%)")
+            if not dd_ok:
+                reasons.append(f"DD too high ({proposed_full['max_drawdown']:.1f}% vs {best_full['max_drawdown']:.1f}%)")
+            reason = "; ".join(reasons)
+            logger.info(f"Round {round_num}: ❌ REJECTED — {reason}")
+
+        round_history.append({
+            "round": round_num, "changes": validated, "applied": applied,
+            "reason": reason, "rationale": rationale,
+            "proposed_full": proposed_full, "proposed_oos": proposed_oos,
+        })
+
+    # === Final Report ===
+    logger.info(f"\n{'='*60}")
+    logger.info(f"INTENSIVE OPTIMIZATION COMPLETE")
+    logger.info(f"{'='*60}")
+    logger.info(f"Rounds: {len(round_history)}, Improvements: {improvements}")
+    logger.info(f"Baseline:  Full {baseline_full['total_return']:+.1f}% PF {baseline_full['profit_factor']:.2f} | "
+                f"OOS {baseline_oos['total_return']:+.1f}% PF {baseline_oos['profit_factor']:.2f}")
+    logger.info(f"Best:      Full {best_full['total_return']:+.1f}% PF {best_full['profit_factor']:.2f} | "
+                f"OOS {best_oos['total_return']:+.1f}% PF {best_oos['profit_factor']:.2f}")
+    logger.info(f"Best config: {json.dumps({k: best_config.get(k) for k in DONCHIAN_CONFIG_RANGES if k in best_config}, indent=2)}")
+    logger.info(f"Tokens used: {total_tokens}, Est cost: ${total_tokens * 0.000003:.4f}")
+
+    # Save results to Supabase
+    try:
+        user_id = os.getenv("OPTIMIZER_USER_ID", "")
+        if not user_id:
+            profile_result = db.select("profiles", columns="id", filters={"email": "jasonnichol@gmail.com"}, limit=1)
+            user_id = (profile_result.get("data") or [{}])[0].get("id", "admin")
+
+        run_id = f"intensive_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}"
+        db.insert("optimization_runs", {
+            "id": run_id,
+            "user_id": user_id,
+            "status": "completed",
+            "trigger": "intensive",
+            "loop_type": "donchian_intensive",
+            "completed_at": datetime.now(timezone.utc).isoformat(),
+            "ai_model": AI_MODEL,
+            "token_usage": total_tokens,
+            "cost_usd": round(total_tokens * 0.000003, 4),
+            "proposals_generated": improvements,
+        })
+
+        # Create a proposal with the final best config for review
+        if improvements > 0:
+            final_changes = {k: best_config[k] for k in DONCHIAN_CONFIG_RANGES if k in best_config}
+            db.insert("optimization_proposals", {
+                "run_id": run_id,
+                "user_id": user_id,
+                "status": "pending",
+                "target": "donchian_config",
+                "proposed_changes": final_changes,
+                "change_rationale": f"Intensive optimization: {improvements} improvements over {len(round_history)} rounds",
+                "baseline_metrics": {**baseline_full, "oos_return": baseline_oos["total_return"], "oos_pf": baseline_oos["profit_factor"]},
+                "proposed_metrics": {**best_full, "oos_return": best_oos["total_return"], "oos_pf": best_oos["profit_factor"]},
+                "improvement_summary": f"Full: {baseline_full['total_return']:+.1f}% → {best_full['total_return']:+.1f}%, OOS: {baseline_oos['total_return']:+.1f}% → {best_oos['total_return']:+.1f}%",
+                "current_config": current_config,
+            })
+    except Exception as e:
+        logger.error(f"Failed to save intensive results: {e}")
+
+    # Telegram report
+    report = (
+        f"🔬 <b>Intensive Optimization Complete</b>\n"
+        f"Rounds: {len(round_history)} | Improvements: {improvements}\n\n"
+        f"📊 <b>Baseline → Best:</b>\n"
+        f"Full: {baseline_full['total_return']:+.1f}% → {best_full['total_return']:+.1f}% (PF {baseline_full['profit_factor']:.2f} → {best_full['profit_factor']:.2f})\n"
+        f"OOS: {baseline_oos['total_return']:+.1f}% → {best_oos['total_return']:+.1f}% (PF {baseline_oos['profit_factor']:.2f} → {best_oos['profit_factor']:.2f})\n"
+        f"DD: {baseline_full['max_drawdown']:.1f}% → {best_full['max_drawdown']:.1f}%\n\n"
+    )
+    if improvements > 0:
+        report += f"<b>Best config saved as pending proposal in Supabase.</b>\nReview at tradesavvy.io/optimizer"
+    else:
+        report += "No improvements found — current params are already well-optimized."
+
+    # Add round-by-round summary
+    report += "\n\n<b>Round Details:</b>\n"
+    for rh in round_history:
+        icon = "✅" if rh["applied"] else "❌"
+        report += f"{icon} R{rh['round']}: {json.dumps(rh['changes'])} → Full {rh['proposed_full']['total_return']:+.1f}%, OOS {rh['proposed_oos']['total_return']:+.1f}%\n"
+
+    send_telegram(report)
+    return best_config, round_history
+
+
 def main():
     """Main loop: weekly schedule + poll for manual triggers."""
     os.makedirs("logs", exist_ok=True)
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--now", action="store_true", help="Run immediately")
+    parser.add_argument("--intensive", type=int, nargs="?", const=10, metavar="ROUNDS",
+                        help="Run intensive backtest optimization (default: 10 rounds)")
     args = parser.parse_args()
 
     if not db:
         logger.error("SUPABASE_URL or SUPABASE_SERVICE_KEY not set. Exiting.")
         sys.exit(1)
+
+    if args.intensive:
+        logger.info(f"Intensive optimization mode: {args.intensive} rounds")
+        run_intensive_optimization(max_rounds=args.intensive)
+        return
 
     if args.now:
         logger.info("Manual run triggered via --now flag")
