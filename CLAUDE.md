@@ -4,9 +4,10 @@
 
 This is an **automated crypto trading bot** that paper-trades 8 coins on daily candles using a Donchian Channel Breakout strategy. Built by Jason Nichol. The system was originally regime-based (hourly), but pivoted to daily breakouts after Coinbase fees destroyed hourly profitability. Runs 24/7 on AWS EC2.
 
-## Current Status (Mar 3, 2026)
+## Current Status (Mar 9, 2026)
 
 - **Production:** Tri-mode Donchian bot running on EC2 (184.72.84.30) in `screen -S donchian`
+- **UAlgo bot STOPPED (Mar 9):** Demoted to signal-only. Honest metrics: 41% WR, 1.17 PF — not viable as trading bot.
 - **Strategy:** Tri-mode Donchian Breakout (daily) — Spot Long + Futures Long + Futures Short
 - **Phase 3 deployed (Feb 26):** 4x ATR trailing stop + pyramid at +15% on new 20-day high
 - **Tri-mode bot deployed (Feb 28):** Spot Long + Futures Long (CFM perps, 1-3x leverage) + Futures Short
@@ -16,7 +17,7 @@ This is an **automated crypto trading bot** that paper-trades 8 coins on daily c
 - **Multi-user beta prep (Mar 3):** RLS migration, signup/reset (hidden), admin roles, key encryption, webhook security
 - **Backtester deployed (Mar 3):** Full Donchian engine, admin-only, custom date ranges, 3-tier caching
 - **Signup hidden:** Link removed from auth page until beta launch ready
-- **Bull filter:** Entries only when BTC > SMA(200). Currently BEAR. (Relaxed from golden cross — dead zone analysis showed +16.6% improvement)
+- **Bull filter:** OFF for Donchian (turned off Mar 9 — data showed +293% without vs +220% with, OOS +16.7% vs +3.8%)
 - **Bear filter:** Short entries when SMA(50) < SMA(200) AND BTC < SMA(200) (death cross). Currently ACTIVE.
 - **Long coins (spot):** BTC, ETH, SOL, XRP, SUI, LINK, ADA, NEAR (8 coins)
 - **Futures long coins:** BTC, ETH, SOL, XRP, SUI, LINK, ADA, DOGE (8 coins, perp IDs)
@@ -54,7 +55,7 @@ Coinbase CFM API → Perp Futures ────── Futures Long + Short Execut
 
 ## Donchian Strategy — Spot Long
 
-- **Bull filter:** BTC close > SMA(200) — gates long entries
+- **Bull filter:** OFF (disabled Mar 9 — hurt returns by blocking entries during recoverable corrections)
 - **Entry:** Close > 20-day Donchian high + volume > 1.5x avg + price > EMA(21)
 - **Exit:** 4x ATR(14) trailing stop OR close < 10-day low OR 15% emergency stop
 - **Blow-off:** Tighten stop to 1.5x ATR if volume > 3x avg AND RSI > 80
@@ -196,10 +197,12 @@ Backtests use 0.45% per side (conservative for $1K-$10K tier).
 13. **Monitor tri-mode** — Observe short signals in bear market, validate futures long when bull returns
 14. ~~Backtester~~ **DEPLOYED** — Full Donchian engine in TradeSavvy, admin-only, custom date ranges (Mar 3, 2026)
 15. ~~Multi-user beta prep~~ **PARTIAL** — RLS, signup/reset, admin roles, key encryption done. Bot refactor pending. (Mar 3, 2026)
-16. **Multi-tenant bot refactor** — UserBot + BotManager (largest remaining beta task)
-17. **Re-enable signup** — When beta launch ready
-18. Evaluate selective coin swaps (e.g., DOGE for NEAR) after paper trading validation
-19. Consider live trading with $1,000-$2,000 after validation
+16. ~~UAlgo bot~~ **DEMOTED** — Stopped on EC2 (Mar 9). Signal-only now. Honest metrics: 41% WR, 1.17 PF.
+17. ~~Bull filter analysis~~ **DONE** — Bull filter OFF for Donchian (Mar 9). +293% without vs +220% with.
+18. **Multi-tenant bot refactor** — UserBot + BotManager (largest remaining beta task)
+19. **Re-enable signup** — When beta launch ready
+20. Evaluate selective coin swaps (e.g., DOGE for NEAR) after paper trading validation
+21. Consider live trading with $1,000-$2,000 after validation
 
 ## Important Rules
 

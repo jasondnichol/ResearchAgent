@@ -1,7 +1,12 @@
 """
-AI Optimization Agent — Dual-Loop System
-Loop 1: Donchian bot config tuning (validated via backtest_engine)
-Loop 2: Signal methodology config tuning (validated via signal replay)
+AI Optimization Agent — Donchian-Focused System
+Loop 1: Donchian bot config tuning (validated via backtest_engine, full + OOS)
+Loop 2: Signal methodology tuning (DISABLED — Donchian is sole trading bot)
+
+Tunable parameters: atr_mult, volume_mult, pyramid_gain_pct, risk_per_trade_pct,
+    emergency_stop_pct, tp1/tp2 gains, short_atr_mult, short_volume_mult,
+    rsi_blowoff, volume_blowoff, atr_mult_tight, short_max_hold_days,
+    pyramid_max_cash, short_rsi_blowoff, short_atr_mult_tight
 
 Runs on EC2 in screen -S optimizer.
 Schedule: Weekly Monday 04:00 UTC (Sunday 8 PM PST).
@@ -391,24 +396,32 @@ def build_donchian_analysis_prompt(data, config):
   "tp1_gain_pct": {config.get('tp1_gain_pct', 10.0)},
   "tp2_gain_pct": {config.get('tp2_gain_pct', 20.0)},
   "short_atr_mult": {config.get('short_atr_mult', 2.0)},
-  "short_volume_mult": {config.get('short_volume_mult', 2.0)}
+  "short_volume_mult": {config.get('short_volume_mult', 2.0)},
+  "rsi_blowoff": {config.get('rsi_blowoff', 80)},
+  "volume_blowoff": {config.get('volume_blowoff', 3.0)},
+  "atr_mult_tight": {config.get('atr_mult_tight', 1.5)},
+  "short_max_hold_days": {config.get('short_max_hold_days', 30)},
+  "pyramid_max_cash": {config.get('pyramid_max_cash', 0.5)},
+  "short_rsi_blowoff": {config.get('short_rsi_blowoff', 20)},
+  "short_atr_mult_tight": {config.get('short_atr_mult_tight', 1.0)}
 }}
 ```
 
 {rejected_lines}
-## Trade Performance (Last {LOOKBACK_DAYS_TRADES} Days)
-- Total trades: {data.get('total', 0)}
-- Closed: {data.get('closed_trades', 0)} (W: {data.get('wins', 0)}, L: {data.get('losses', 0)})
-- Avg return: {data.get('avg_return', 0)}%
+## Trade Performance
+{"(BACKTEST-ONLY MODE — no live trades yet, optimize using backtested metrics)" if data.get("_backtest_only") else f"Last {LOOKBACK_DAYS_TRADES} days: {data.get('closed_trades', 0)} closed (W: {data.get('wins', 0)}, L: {data.get('losses', 0)}), Avg return: {data.get('avg_return', 0)}%"}
 
-## Recent Trades
-{json.dumps(data.get('recent_trades', [])[:10], indent=2, default=str)}
+Note: The backtester will be run automatically on both baseline and proposed configs to validate changes. Both full (4-year) and out-of-sample (2025-2026) periods are tested. Focus on improving BOTH full-period AND OOS performance — avoid overfitting to the training set.
 
 ## Constraints
 - Make conservative changes: 10-30% adjustments per parameter
-- Optimize for overall portfolio return, not just win rate
+- Optimize for overall portfolio return AND profit factor, not just win rate
 - Only change parameters that address actual performance issues
 - Do NOT change coins list, leverage, or trading mode
+- Bull filter is OFF, bear filter is death_cross — do NOT change these
+- The backtester uses realistic futures mechanics: intrabar SL (high/low), funding costs, liquidation checks, SL slippage
+- New tunable parameters: rsi_blowoff (long blow-off RSI threshold), volume_blowoff (blow-off volume multiplier), atr_mult_tight (tightened stop during blow-off), short_max_hold_days, pyramid_max_cash (max fraction of cash for pyramid add), short_rsi_blowoff, short_atr_mult_tight
+- Consider tuning blow-off detection (rsi_blowoff + volume_blowoff + atr_mult_tight) — these have never been optimized
 
 ## Output Format
 Return ONLY a JSON object:
@@ -600,15 +613,30 @@ def run_donchian_backtest(current_config, proposed_changes):
             "tp1_gain_pct": "tp1_gain_pct",
             "tp2_gain_pct": "tp2_gain_pct",
             "emergency_stop_pct": "emergency_stop_pct",
+            "rsi_blowoff": "rsi_blowoff",
+            "volume_blowoff": "volume_blowoff",
+            "atr_mult_tight": "atr_mult_tight",
+            "short_max_hold_days": "short_max_hold_days",
+            "pyramid_max_cash": "pyramid_max_cash",
+            "short_rsi_blowoff": "short_rsi_blowoff",
+            "short_atr_mult_tight": "short_atr_mult_tight",
         }
 
-        # Baseline
-        baseline_params = {"mode": "combined", "period": "full"}
+        # Baseline — match production config (bull filter OFF, death cross ON)
+        baseline_params = {
+            "mode": "combined", "period": "full",
+            "bull_filter": "off", "bear_filter": "death_cross",
+            "long_leverage": 1.0, "short_leverage": 1.0,
+        }
         for opt_key, bt_key in PARAM_MAP.items():
             if opt_key in current_config:
                 baseline_params[bt_key] = current_config[opt_key]
 
         baseline = run_backtest(baseline_params)
+
+        # Also run OOS test period for regression check
+        oos_params = {**baseline_params, "period": "test"}
+        baseline_oos = run_backtest(oos_params)
 
         # Proposed
         proposed_params = {**baseline_params}
@@ -618,6 +646,10 @@ def run_donchian_backtest(current_config, proposed_changes):
 
         proposed = run_backtest(proposed_params)
 
+        # OOS for proposed
+        proposed_oos_params = {**proposed_params, "period": "test"}
+        proposed_oos = run_backtest(proposed_oos_params)
+
         return {
             "baseline": {
                 "total_return": baseline.get("total_return"),
@@ -625,6 +657,9 @@ def run_donchian_backtest(current_config, proposed_changes):
                 "profit_factor": baseline.get("profit_factor"),
                 "max_drawdown": baseline.get("max_drawdown"),
                 "total_trades": baseline.get("total_trades"),
+                "oos_return": baseline_oos.get("total_return"),
+                "oos_pf": baseline_oos.get("profit_factor"),
+                "oos_dd": baseline_oos.get("max_drawdown"),
             },
             "proposed": {
                 "total_return": proposed.get("total_return"),
@@ -632,6 +667,9 @@ def run_donchian_backtest(current_config, proposed_changes):
                 "profit_factor": proposed.get("profit_factor"),
                 "max_drawdown": proposed.get("max_drawdown"),
                 "total_trades": proposed.get("total_trades"),
+                "oos_return": proposed_oos.get("total_return"),
+                "oos_pf": proposed_oos.get("profit_factor"),
+                "oos_dd": proposed_oos.get("max_drawdown"),
             },
         }
     except Exception as e:
@@ -763,7 +801,14 @@ def run_optimization_cycle(trigger="manual", existing_run_id=None):
         logger.info("Loop 1: Donchian bot tuning...")
         trade_data = collect_trade_data()
 
-        if trade_data and trade_data.get("closed_trades", 0) >= 5:
+        # Run even without live trades — use backtest metrics for optimization
+        has_live_trades = trade_data and trade_data.get("closed_trades", 0) >= 5
+        if not has_live_trades:
+            logger.info("No live trade data — using backtest-only optimization mode")
+            trade_data = trade_data or {}
+            trade_data["_backtest_only"] = True
+
+        if True:  # Always run Donchian loop (backtest-only if no live trades)
             current_config = get_current_config("donchian_config")
             prompt = build_donchian_analysis_prompt(trade_data, current_config)
             ai_result = run_ai_analysis(prompt)
@@ -805,63 +850,12 @@ def run_optimization_cycle(trigger="manual", existing_run_id=None):
         else:
             logger.info("Loop 1: Not enough trade data, skipping")
 
-        # ── Loop 2: Signal Methodology Tuning ──
-        logger.info("Loop 2: Signal methodology tuning...")
-        signal_data = collect_signal_data()
-
-        if signal_data:
-            for methodology in ["smc", "priceaction", "technical"]:
-                method_stats = signal_data["by_methodology"].get(methodology)
-                if not method_stats or method_stats.get("total", 0) < 5:
-                    logger.info(f"Signal {methodology}: Not enough data, skipping")
-                    continue
-
-                current_config = get_current_config(f"signal_config_{methodology}")
-                if not current_config:
-                    # Use defaults from signal_config module
-                    from signals.signal_config import DEFAULTS
-                    current_config = DEFAULTS.get(methodology, {})
-
-                prompt = build_signal_analysis_prompt(signal_data, current_config, methodology)
-                ai_result = run_ai_analysis(prompt)
-
-                if ai_result and ai_result.get("proposed_changes"):
-                    total_tokens += ai_result.get("_token_usage", 0)
-                    changes = ai_result["proposed_changes"]
-                    target = f"signal_config_{methodology}"
-                    validated, warnings = validate_proposed_changes(changes, target)
-
-                    if validated:
-                        # Validate via signal replay
-                        replay_result = run_signal_replay(methodology, current_config, validated)
-                        baseline_metrics = replay_result.get("baseline", {}) if replay_result else {}
-                        proposed_metrics = replay_result.get("proposed", {}) if replay_result else {}
-
-                        # Regression gate — auto-reject if proposed is worse
-                        is_regression, reason = _is_regression(baseline_metrics, proposed_metrics, target)
-                        if is_regression:
-                            logger.info(f"Signal {methodology} proposal auto-rejected (regression): {reason}")
-                        else:
-                            proposal = {
-                                "run_id": run_id,
-                                "user_id": user_id,
-                                "status": "pending",
-                                "target": target,
-                                "proposed_changes": validated,
-                                "change_rationale": ai_result.get("rationale", ""),
-                                "baseline_metrics": baseline_metrics,
-                                "proposed_metrics": proposed_metrics,
-                                "improvement_summary": ai_result.get("expected_impact", ""),
-                                "current_config": current_config,
-                            }
-                            db.insert("optimization_proposals", proposal)
-                            proposals.append(proposal)
-                            logger.info(f"Signal {methodology} proposal created: {list(validated.keys())}")
-                elif ai_result:
-                    total_tokens += ai_result.get("_token_usage", 0)
-                    logger.info(f"Signal {methodology}: No changes proposed")
-        else:
-            logger.info("Loop 2: Not enough signal data, skipping")
+        # ── Loop 2: Signal Methodology Tuning — DISABLED (Mar 9, 2026) ──
+        # Signal methods (SMC, PriceAction, Technical) are signal-only, not trading.
+        # Donchian is the sole trading bot. All optimizer cycles focus on Donchian.
+        # Re-enable if a signal method is promoted to bot status.
+        logger.info("Loop 2: Signal methodology tuning DISABLED (Donchian-only focus)")
+        signal_data = collect_signal_data()  # still collect for report context
 
         # ── Generate Report ──
         html_report = generate_html_report(run_id, signal_data, trade_data, proposals)
