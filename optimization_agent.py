@@ -1046,14 +1046,14 @@ Your goal: find the optimal Donchian breakout parameters by proposing changes te
 - Try 1-3 parameter changes per round. Larger jumps early, smaller refinements later.
 - Bull filter is OFF, bear filter is death_cross — do NOT change these.
 
-## Allowed Ranges
+## Allowed Ranges (propose a SINGLE scalar value within each range, NOT a list/array)
 {json.dumps(DONCHIAN_CONFIG_RANGES, indent=2)}
 
 ## Output Format
-Return ONLY a JSON object:
+Return ONLY a JSON object. Each value in proposed_changes MUST be a single number (e.g., 3.5), NOT a list or range:
 ```json
 {{
-  "proposed_changes": {{"param_name": new_value, ...}},
+  "proposed_changes": {{"param_name": 3.5, "other_param": 25}},
   "rationale": "Brief explanation of what you're testing and why",
   "expected_impact": "What improvement we expect"
 }}
@@ -1090,16 +1090,20 @@ If you believe current params are optimal: {{"proposed_changes": {{}}, "rational
         # Run backtest with proposed changes
         proposed_full, proposed_oos = _run_full_and_oos(validated)
 
-        # Check improvement criteria: BOTH full AND OOS must not regress
-        full_better = (proposed_full["total_return"] >= best_full["total_return"] or
-                       proposed_full["profit_factor"] >= best_full["profit_factor"])
-        oos_better = (proposed_oos["total_return"] >= best_oos["total_return"] or
-                      proposed_oos["profit_factor"] >= best_oos["profit_factor"])
+        # Acceptance: full must not regress on EITHER return or PF,
+        # OOS must stay within tolerance, DD must not blow up
+        full_ret_ok = proposed_full["total_return"] >= best_full["total_return"] - 1.0
+        full_pf_ok = proposed_full["profit_factor"] >= best_full["profit_factor"] - 0.05
+        full_better = full_ret_ok and full_pf_ok
         oos_not_worse = (proposed_oos["total_return"] >= best_oos["total_return"] - 1.0 and
                          proposed_oos["max_drawdown"] <= best_oos["max_drawdown"] + 2.0)
         dd_ok = proposed_full["max_drawdown"] <= best_full["max_drawdown"] + 3.0
+        # At least one metric must actually improve (not just stay flat)
+        has_improvement = (proposed_full["total_return"] > best_full["total_return"] + 0.5 or
+                           proposed_full["profit_factor"] > best_full["profit_factor"] + 0.02 or
+                           proposed_oos["total_return"] > best_oos["total_return"] + 0.5)
 
-        applied = full_better and oos_not_worse and dd_ok
+        applied = full_better and oos_not_worse and dd_ok and has_improvement
 
         if applied:
             improvements += 1
@@ -1113,13 +1117,17 @@ If you believe current params are optimal: {{"proposed_changes": {{}}, "rational
                         f"OOS {proposed_oos['total_return']:+.1f}% PF {proposed_oos['profit_factor']:.2f}")
         else:
             reasons = []
-            if not full_better:
-                reasons.append(f"full not better ({proposed_full['total_return']:+.1f}% vs {best_full['total_return']:+.1f}%)")
+            if not full_ret_ok:
+                reasons.append(f"full return regressed ({proposed_full['total_return']:+.1f}% vs {best_full['total_return']:+.1f}%)")
+            if not full_pf_ok:
+                reasons.append(f"full PF regressed ({proposed_full['profit_factor']:.2f} vs {best_full['profit_factor']:.2f})")
             if not oos_not_worse:
                 reasons.append(f"OOS regressed ({proposed_oos['total_return']:+.1f}% vs {best_oos['total_return']:+.1f}%)")
             if not dd_ok:
                 reasons.append(f"DD too high ({proposed_full['max_drawdown']:.1f}% vs {best_full['max_drawdown']:.1f}%)")
-            reason = "; ".join(reasons)
+            if not has_improvement:
+                reasons.append("no meaningful improvement")
+            reason = "; ".join(reasons) if reasons else "no criteria met"
             logger.info(f"Round {round_num}: ❌ REJECTED — {reason}")
 
         round_history.append({
