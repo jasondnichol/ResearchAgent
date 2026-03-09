@@ -46,14 +46,14 @@ DEFAULT_STRATEGY_PARAMS = {
     'donchian_period': 20,
     'exit_period': 10,
     'atr_period': 14,
-    'atr_mult': 4.0,
+    'atr_mult': 4.5,
     'volume_mult': 1.5,
     'ema_period': 21,
     'rsi_blowoff': 80,
     'volume_blowoff': 3.0,
     'atr_mult_tight': 1.5,
     'tp1_pct': 10.0,
-    'tp2_pct': 20.0,
+    'tp2_pct': 25.0,
     'tp1_fraction': 0.25,
     'tp2_fraction': 0.25,
     'lookback': 60,
@@ -62,7 +62,7 @@ DEFAULT_STRATEGY_PARAMS = {
 DEFAULT_MAX_POSITIONS = 4
 DEFAULT_RISK_PER_TRADE_PCT = 2.0
 DEFAULT_STARTING_CAPITAL = 10000.0
-DEFAULT_EMERGENCY_STOP_PCT = 15.0
+DEFAULT_EMERGENCY_STOP_PCT = 18.0
 DEFAULT_PYRAMID_ENABLED = True
 DEFAULT_PYRAMID_GAIN_PCT = 15.0
 DEFAULT_PYRAMID_RISK_PCT = 1.0
@@ -78,11 +78,11 @@ DEFAULT_SHORT_STRATEGY_PARAMS = {
     'atr_mult': 2.0,
     'volume_mult': 2.0,
     'ema_period': 21,
-    'rsi_blowoff': 20,
+    'rsi_blowoff': 25,
     'volume_blowoff': 3.0,
-    'atr_mult_tight': 1.0,
+    'atr_mult_tight': 2.0,
     'tp1_pct': 10.0,
-    'tp2_pct': 20.0,
+    'tp2_pct': 25.0,
     'tp1_fraction': 0.25,
     'tp2_fraction': 0.25,
     'lookback': 60,
@@ -94,8 +94,8 @@ DEFAULT_SHORT_COIN_UNIVERSE = [
 ]
 
 DEFAULT_SHORT_RISK_PER_TRADE_PCT = 2.0
-DEFAULT_SHORT_EMERGENCY_STOP_PCT = 15.0
-DEFAULT_SHORT_MAX_HOLD_DAYS = 30
+DEFAULT_SHORT_EMERGENCY_STOP_PCT = 18.0
+DEFAULT_SHORT_MAX_HOLD_DAYS = 25
 DEFAULT_SHORT_PYRAMID_ENABLED = False
 DEFAULT_BEAR_FILTER_ENABLED = True
 
@@ -111,21 +111,21 @@ DEFAULT_FUTURES_LONG_STRATEGY_PARAMS = {
     'donchian_period': 20,
     'exit_period': 10,
     'atr_period': 14,
-    'atr_mult': 4.0,
+    'atr_mult': 4.5,
     'volume_mult': 1.5,
     'ema_period': 21,
     'rsi_blowoff': 80,
     'volume_blowoff': 3.0,
     'atr_mult_tight': 1.5,
     'tp1_pct': 10.0,
-    'tp2_pct': 20.0,
+    'tp2_pct': 25.0,
     'tp1_fraction': 0.25,
     'tp2_fraction': 0.25,
     'lookback': 60,
 }
 
 DEFAULT_FUTURES_LONG_RISK_PER_TRADE_PCT = 2.0
-DEFAULT_FUTURES_LONG_EMERGENCY_STOP_PCT = 15.0
+DEFAULT_FUTURES_LONG_EMERGENCY_STOP_PCT = 18.0
 DEFAULT_FUTURES_LONG_PYRAMID_ENABLED = True
 DEFAULT_FUTURES_LONG_PYRAMID_GAIN_PCT = 15.0
 DEFAULT_FUTURES_LONG_PYRAMID_RISK_PCT = 1.0

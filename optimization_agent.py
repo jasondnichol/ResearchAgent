@@ -388,22 +388,22 @@ def build_donchian_analysis_prompt(data, config):
 ## Current Bot Configuration (key parameters)
 ```json
 {{
-  "atr_mult": {config.get('atr_mult', 4.0)},
+  "atr_mult": {config.get('atr_mult', 4.5)},
   "volume_mult": {config.get('volume_mult', 1.5)},
   "pyramid_gain_pct": {config.get('pyramid_gain_pct', 15.0)},
   "risk_per_trade_pct": {config.get('risk_per_trade_pct', 2.0)},
-  "emergency_stop_pct": {config.get('emergency_stop_pct', 15.0)},
+  "emergency_stop_pct": {config.get('emergency_stop_pct', 18.0)},
   "tp1_gain_pct": {config.get('tp1_gain_pct', 10.0)},
-  "tp2_gain_pct": {config.get('tp2_gain_pct', 20.0)},
+  "tp2_gain_pct": {config.get('tp2_gain_pct', 25.0)},
   "short_atr_mult": {config.get('short_atr_mult', 2.0)},
   "short_volume_mult": {config.get('short_volume_mult', 2.0)},
   "rsi_blowoff": {config.get('rsi_blowoff', 80)},
   "volume_blowoff": {config.get('volume_blowoff', 3.0)},
   "atr_mult_tight": {config.get('atr_mult_tight', 1.5)},
-  "short_max_hold_days": {config.get('short_max_hold_days', 30)},
+  "short_max_hold_days": {config.get('short_max_hold_days', 25)},
   "pyramid_max_cash": {config.get('pyramid_max_cash', 0.5)},
-  "short_rsi_blowoff": {config.get('short_rsi_blowoff', 20)},
-  "short_atr_mult_tight": {config.get('short_atr_mult_tight', 1.0)}
+  "short_rsi_blowoff": {config.get('short_rsi_blowoff', 25)},
+  "short_atr_mult_tight": {config.get('short_atr_mult_tight', 2.0)}
 }}
 ```
 
