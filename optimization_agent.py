@@ -342,7 +342,7 @@ def build_signal_analysis_prompt(data, config, methodology):
 - Are entries firing too late? (High confidence thresholds = missing early moves)
 - Are TPs too conservative? (Small take_profit distances = leaving money on table)
 - Is the signal firing too often on noise? (Low confidence gates = false signals)
-- Review change history: do NOT re-propose changes already made in prior versions
+- Review change history carefully before proposing any changes
 - If a recent version change improved results, acknowledge that and look for remaining issues
 
 ## Constraints
@@ -350,7 +350,7 @@ def build_signal_analysis_prompt(data, config, methodology):
 - Optimize for PROFITABILITY (avg return), not just win rate
 - Only change parameters that address the identified root causes
 - Do NOT change parameters that are performing well
-- Do NOT revert changes from prior versions that showed improvement
+- CRITICAL: If your proposed change would move a parameter CLOSER to a value from a PRIOR version (i.e. partially or fully reverting a previous change), you MUST include "reversion_justification" in your JSON explaining why the previous change was wrong and what new evidence supports reverting it. Changes marked as "manual" source in the history were deliberate human decisions based on deep analysis — reverting these requires especially strong justification.
 
 ## Output Format
 Return a JSON object with:
@@ -358,7 +358,8 @@ Return a JSON object with:
 {{
   "proposed_changes": {{"param_name": new_value, ...}},
   "rationale": "Brief explanation of each change",
-  "expected_impact": "What improvement we expect"
+  "expected_impact": "What improvement we expect",
+  "reversion_justification": "REQUIRED if any change reverts a prior version's parameter. Omit if no reversions."
 }}
 ```
 If current params look optimal, return: {{"proposed_changes": {{}}, "rationale": "Current parameters are performing well", "expected_impact": "None needed"}}
