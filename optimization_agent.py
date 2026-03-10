@@ -657,7 +657,7 @@ def run_donchian_backtest(current_config, proposed_changes):
 
         # Baseline — match production config (bull filter OFF, death cross ON)
         baseline_params = {
-            "mode": "combined", "period": "full",
+            "mode": "futures-combined", "period": "full",
             "bull_filter": "off", "bear_filter": "death_cross",
             "long_leverage": 1.0, "short_leverage": 1.0,
         }
@@ -995,7 +995,7 @@ def run_intensive_optimization(max_rounds=10):
     def _build_bt_params(config_overrides=None):
         """Build backtest params from current config + overrides."""
         params = {
-            "mode": "combined", "bull_filter": "off", "bear_filter": "death_cross",
+            "mode": "futures-combined", "bull_filter": "off", "bear_filter": "death_cross",
             "long_leverage": 1.0, "short_leverage": 1.0,
         }
         for opt_key, bt_key in PARAM_MAP.items():
@@ -1259,7 +1259,7 @@ def run_ualgo_filter_sweep():
             combo_num = bi * len(BEAR_FILTERS) + bei + 1
             logger.info(f"[{combo_num}/49] bull={bull}, bear={bear}")
             try:
-                params = {"mode": "combined", "period": "full",
+                params = {"mode": "futures-combined", "period": "full",
                           "bull_filter": bull, "bear_filter": bear,
                           "long_leverage": 1.0, "short_leverage": 1.0}
                 full_res = run_backtest({**params, "period": "full"})
@@ -1329,7 +1329,7 @@ def run_intensive_ualgo(max_rounds=20, bull_filter="off", bear_filter="death_cro
     current_config['short_sl_atr_mult'] = UALGO_DEFAULTS['sl_atr_mult']
 
     def _run_full_and_oos(config_overrides=None):
-        params = {"mode": "combined", "period": "full",
+        params = {"mode": "futures-combined", "period": "full",
                   "bull_filter": bull_filter, "bear_filter": bear_filter,
                   "long_leverage": 1.0, "short_leverage": 1.0}
         # Apply accumulated best config (closure over best_config)
