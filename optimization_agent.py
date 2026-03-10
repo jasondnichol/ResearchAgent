@@ -1293,6 +1293,7 @@ def run_intensive_ualgo(max_rounds=20):
                                  f"OOS {rh['proposed_oos']['total_return']:+.1f}% PF {rh['proposed_oos']['profit_factor']:.2f} "
                                  f"[{status}: {rh.get('reason', '')}]\n")
 
+        current_best_params = {k: best_config.get(k) for k in UALGO_CONFIG_RANGES}
         prompt = f"""You are an expert crypto trading bot optimizer. Optimize the UAlgo strategy parameters.
 
 UAlgo uses Supertrend + RSI + CMO + HMA indicators to generate long and short signals on daily candles.
@@ -1301,7 +1302,7 @@ Exit: ATR-Fibonacci partial TPs (1.618/2.618/3.618 * ATR) + opposing signal + ma
 
 ## Current Best Configuration
 ```json
-{json.dumps({{k: best_config.get(k) for k in UALGO_CONFIG_RANGES}}, indent=2)}
+{json.dumps(current_best_params, indent=2)}
 ```
 
 ## Current Best Performance
