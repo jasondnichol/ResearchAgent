@@ -540,6 +540,26 @@ DONCHIAN_CONFIG_RANGES = {
     "short_atr_mult_tight": (0.5, 2.5),
 }
 
+UALGO_CONFIG_RANGES = {
+    "supertrend_multiplier": (1.0, 5.0),
+    "sl_atr_mult": (1.0, 4.0),
+    "sl_min_pct": (0.5, 3.0),
+    "flip_window": (2, 10),
+    "rsi_period": (5, 21),
+    "hma_open_period": (3, 12),
+    "hma_close_period": (5, 21),
+    "cmo_period": (7, 21),
+    "rsi_buy_threshold": (40, 80),
+    "cmo_buy_threshold": (-30, 10),
+    "rsi_sell_threshold": (20, 60),
+    "cmo_sell_threshold": (-10, 30),
+    "tp1_fraction": (0.15, 0.40),
+    "tp2_fraction": (0.15, 0.40),
+    "max_hold_days": (10, 60),
+    "risk_per_trade": (1.0, 5.0),
+    "short_sl_atr_mult": (1.0, 4.0),
+}
+
 
 def validate_proposed_changes(changes, target):
     """Validate each proposed change against allowed ranges."""
@@ -548,6 +568,8 @@ def validate_proposed_changes(changes, target):
 
     if target == "donchian_config":
         ranges = DONCHIAN_CONFIG_RANGES
+    elif target == "ualgo_config":
+        ranges = UALGO_CONFIG_RANGES
     elif target.startswith("signal_config_"):
         methodology = target.replace("signal_config_", "")
         ranges = SIGNAL_CONFIG_RANGES.get(methodology, {})
@@ -1211,6 +1233,194 @@ If you believe current params are optimal: {{"proposed_changes": {{}}, "rational
     return best_config, round_history
 
 
+def run_intensive_ualgo(max_rounds=20):
+    """Run intensive optimization on UAlgo backtest engine.
+
+    Same pattern as Donchian intensive: AI proposes → backtest full + OOS → auto-apply if both improve.
+    Uses backtest_ualgo_engine.run_backtest() with UAlgo-specific parameters.
+    """
+    tradesavvy_backend = os.path.join(os.path.dirname(__file__), '..', 'tradesavvy', 'backend')
+    if tradesavvy_backend not in sys.path:
+        sys.path.insert(0, tradesavvy_backend)
+    from backtest_ualgo_engine import run_backtest
+
+    logger.info(f"=== UALGO INTENSIVE OPTIMIZATION: up to {max_rounds} rounds ===")
+    send_telegram(f"🔬 <b>UAlgo Intensive Optimization Started</b>\nMax rounds: {max_rounds}")
+
+    # UAlgo defaults as starting config
+    from backtest_ualgo_engine import UALGO_DEFAULTS
+    current_config = dict(UALGO_DEFAULTS)
+    # Add top-level params not in UALGO_DEFAULTS but accepted by run_backtest
+    current_config['risk_per_trade'] = 2.0
+    current_config['short_sl_atr_mult'] = UALGO_DEFAULTS['sl_atr_mult']
+
+    def _run_full_and_oos(config_overrides=None):
+        params = {"mode": "combined", "period": "full",
+                  "bull_filter": "off", "bear_filter": "death_cross",
+                  "long_leverage": 1.0, "short_leverage": 1.0}
+        # Apply accumulated best config (closure over best_config)
+        for k in UALGO_CONFIG_RANGES:
+            if k in best_config:
+                params[k] = best_config[k]
+        # Apply current round's overrides
+        if config_overrides:
+            params.update(config_overrides)
+        full_res = run_backtest({**params, "period": "full"})
+        oos_res = run_backtest({**params, "period": "test"})
+        keys = ["total_return", "profit_factor", "win_rate", "max_drawdown", "total_trades", "sharpe_ratio"]
+        return ({k: full_res.get(k) for k in keys}, {k: oos_res.get(k) for k in keys})
+
+    best_config = dict(current_config)
+    baseline_full, baseline_oos = _run_full_and_oos()
+    best_full, best_oos = baseline_full, baseline_oos
+    round_history = []
+    total_tokens = 0
+    improvements = 0
+
+    logger.info(f"UAlgo Baseline: Full {baseline_full['total_return']:+.1f}% PF {baseline_full['profit_factor']:.2f} | "
+                f"OOS {baseline_oos['total_return']:+.1f}% PF {baseline_oos['profit_factor']:.2f}")
+
+    for round_num in range(1, max_rounds + 1):
+        logger.info(f"\n--- UAlgo Round {round_num}/{max_rounds} ---")
+
+        history_text = ""
+        if round_history:
+            history_text = "\n## Previous Rounds\n"
+            for rh in round_history:
+                status = "APPLIED" if rh["applied"] else "REJECTED"
+                history_text += (f"- R{rh['round']}: {json.dumps(rh['changes'])} → "
+                                 f"Full {rh['proposed_full']['total_return']:+.1f}% PF {rh['proposed_full']['profit_factor']:.2f}, "
+                                 f"OOS {rh['proposed_oos']['total_return']:+.1f}% PF {rh['proposed_oos']['profit_factor']:.2f} "
+                                 f"[{status}: {rh.get('reason', '')}]\n")
+
+        prompt = f"""You are an expert crypto trading bot optimizer. Optimize the UAlgo strategy parameters.
+
+UAlgo uses Supertrend + RSI + CMO + HMA indicators to generate long and short signals on daily candles.
+Entry: Supertrend flip + RSI/CMO thresholds + pivot detection
+Exit: ATR-Fibonacci partial TPs (1.618/2.618/3.618 * ATR) + opposing signal + max hold + stop loss
+
+## Current Best Configuration
+```json
+{json.dumps({{k: best_config.get(k) for k in UALGO_CONFIG_RANGES}}, indent=2)}
+```
+
+## Current Best Performance
+- Full (2022-2026): Return {best_full['total_return']:+.1f}%, PF {best_full['profit_factor']:.2f}, WR {best_full['win_rate']:.1f}%, DD {best_full['max_drawdown']:.1f}%
+- OOS (2025-2026): Return {best_oos['total_return']:+.1f}%, PF {best_oos['profit_factor']:.2f}, WR {best_oos['win_rate']:.1f}%, DD {best_oos['max_drawdown']:.1f}%
+
+## Baseline (starting point)
+- Full: {baseline_full['total_return']:+.1f}%, PF {baseline_full['profit_factor']:.2f}
+- OOS: {baseline_oos['total_return']:+.1f}%, PF {baseline_oos['profit_factor']:.2f}
+
+{history_text}
+
+## Round {round_num}/{max_rounds}
+- {"Focus on high-impact params: supertrend_multiplier, sl_atr_mult, RSI/CMO thresholds" if round_num <= 5 else "Try TP fractions, max_hold_days, flip_window, indicator periods" if round_num <= 12 else "Fine-tune combinations not yet tested"}
+- Auto-applied if both full AND OOS improve. No human review.
+- Bull filter OFF, bear filter death_cross — do NOT change these.
+
+## Allowed Ranges (propose SINGLE scalar values, NOT lists)
+{json.dumps(UALGO_CONFIG_RANGES, indent=2)}
+
+Return ONLY a JSON object:
+```json
+{{
+  "proposed_changes": {{"param_name": 3.5}},
+  "rationale": "Brief explanation",
+  "expected_impact": "Expected improvement"
+}}
+```
+If optimal: {{"proposed_changes": {{}}, "rationale": "Converged"}}"""
+
+        ai_result = run_ai_analysis(prompt)
+        if not ai_result:
+            logger.error(f"UAlgo R{round_num}: AI failed, stopping")
+            break
+
+        total_tokens += ai_result.get("_token_usage", 0)
+        changes = ai_result.get("proposed_changes", {})
+        rationale = ai_result.get("rationale", "")
+
+        if not changes:
+            logger.info(f"UAlgo R{round_num}: AI says optimal — {rationale}")
+            break
+
+        validated, warnings = validate_proposed_changes(changes, "ualgo_config")
+        if warnings:
+            logger.info(f"UAlgo R{round_num} warnings: {warnings}")
+        if not validated:
+            logger.info(f"UAlgo R{round_num}: No valid changes")
+            round_history.append({"round": round_num, "changes": changes, "applied": False,
+                                  "reason": "validation failed", "proposed_full": best_full, "proposed_oos": best_oos})
+            continue
+
+        logger.info(f"UAlgo R{round_num}: Testing {json.dumps(validated)} — {rationale}")
+        proposed_full, proposed_oos = _run_full_and_oos(validated)
+
+        # Same acceptance criteria as Donchian
+        full_ret_ok = proposed_full["total_return"] >= best_full["total_return"] - 1.0
+        full_pf_ok = proposed_full["profit_factor"] >= best_full["profit_factor"] - 0.05
+        full_better = full_ret_ok and full_pf_ok
+        oos_not_worse = (proposed_oos["total_return"] >= best_oos["total_return"] - 1.0 and
+                         proposed_oos["max_drawdown"] <= best_oos["max_drawdown"] + 2.0)
+        dd_ok = proposed_full["max_drawdown"] <= best_full["max_drawdown"] + 3.0
+        has_improvement = (proposed_full["total_return"] > best_full["total_return"] + 0.5 or
+                           proposed_full["profit_factor"] > best_full["profit_factor"] + 0.02 or
+                           proposed_oos["total_return"] > best_oos["total_return"] + 0.5)
+
+        applied = full_better and oos_not_worse and dd_ok and has_improvement
+
+        if applied:
+            improvements += 1
+            for k, v in validated.items():
+                best_config[k] = v
+            best_full = proposed_full
+            best_oos = proposed_oos
+            reason = "improvement"
+            logger.info(f"UAlgo R{round_num}: ✅ APPLIED — Full {proposed_full['total_return']:+.1f}% PF {proposed_full['profit_factor']:.2f} | "
+                        f"OOS {proposed_oos['total_return']:+.1f}% PF {proposed_oos['profit_factor']:.2f}")
+        else:
+            reasons = []
+            if not full_ret_ok: reasons.append(f"full return regressed ({proposed_full['total_return']:+.1f}%)")
+            if not full_pf_ok: reasons.append(f"full PF regressed ({proposed_full['profit_factor']:.2f})")
+            if not oos_not_worse: reasons.append(f"OOS regressed ({proposed_oos['total_return']:+.1f}%)")
+            if not dd_ok: reasons.append(f"DD too high ({proposed_full['max_drawdown']:.1f}%)")
+            if not has_improvement: reasons.append("no meaningful improvement")
+            reason = "; ".join(reasons) if reasons else "no criteria met"
+            logger.info(f"UAlgo R{round_num}: ❌ REJECTED — {reason}")
+
+        round_history.append({
+            "round": round_num, "changes": validated, "applied": applied,
+            "reason": reason, "rationale": rationale,
+            "proposed_full": proposed_full, "proposed_oos": proposed_oos,
+        })
+
+    # Final report
+    logger.info(f"\n{'='*60}")
+    logger.info(f"UALGO INTENSIVE OPTIMIZATION COMPLETE")
+    logger.info(f"{'='*60}")
+    logger.info(f"Rounds: {len(round_history)}, Improvements: {improvements}")
+    logger.info(f"Baseline:  Full {baseline_full['total_return']:+.1f}% PF {baseline_full['profit_factor']:.2f} | OOS {baseline_oos['total_return']:+.1f}% PF {baseline_oos['profit_factor']:.2f}")
+    logger.info(f"Best:      Full {best_full['total_return']:+.1f}% PF {best_full['profit_factor']:.2f} | OOS {best_oos['total_return']:+.1f}% PF {best_oos['profit_factor']:.2f}")
+    logger.info(f"Best config: {json.dumps({k: best_config.get(k) for k in UALGO_CONFIG_RANGES}, indent=2)}")
+    logger.info(f"Tokens used: {total_tokens}, Est cost: ${total_tokens * 0.000003:.4f}")
+
+    report = (
+        f"🔬 <b>UAlgo Intensive Optimization Complete</b>\n"
+        f"Rounds: {len(round_history)} | Improvements: {improvements}\n\n"
+        f"📊 <b>Baseline → Best:</b>\n"
+        f"Full: {baseline_full['total_return']:+.1f}% → {best_full['total_return']:+.1f}% (PF {baseline_full['profit_factor']:.2f} → {best_full['profit_factor']:.2f})\n"
+        f"OOS: {baseline_oos['total_return']:+.1f}% → {best_oos['total_return']:+.1f}% (PF {baseline_oos['profit_factor']:.2f} → {best_oos['profit_factor']:.2f})\n"
+        f"DD: {baseline_full['max_drawdown']:.1f}% → {best_full['max_drawdown']:.1f}%\n\n"
+        f"<b>Round Details:</b>\n"
+    )
+    for rh in round_history:
+        icon = "✅" if rh["applied"] else "❌"
+        report += f"{icon} R{rh['round']}: {json.dumps(rh['changes'])} → Full {rh['proposed_full']['total_return']:+.1f}%, OOS {rh['proposed_oos']['total_return']:+.1f}%\n"
+    send_telegram(report)
+    return best_config, round_history
+
+
 def main():
     """Main loop: weekly schedule + poll for manual triggers."""
     os.makedirs("logs", exist_ok=True)
@@ -1218,7 +1428,9 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--now", action="store_true", help="Run immediately")
     parser.add_argument("--intensive", type=int, nargs="?", const=10, metavar="ROUNDS",
-                        help="Run intensive backtest optimization (default: 10 rounds)")
+                        help="Run intensive Donchian backtest optimization (default: 10 rounds)")
+    parser.add_argument("--intensive-ualgo", type=int, nargs="?", const=20, metavar="ROUNDS",
+                        help="Run intensive UAlgo backtest optimization (default: 20 rounds)")
     args = parser.parse_args()
 
     if not db:
@@ -1228,6 +1440,11 @@ def main():
     if args.intensive:
         logger.info(f"Intensive optimization mode: {args.intensive} rounds")
         run_intensive_optimization(max_rounds=args.intensive)
+        return
+
+    if args.intensive_ualgo:
+        logger.info(f"UAlgo intensive optimization mode: {args.intensive_ualgo} rounds")
+        run_intensive_ualgo(max_rounds=args.intensive_ualgo)
         return
 
     if args.now:
