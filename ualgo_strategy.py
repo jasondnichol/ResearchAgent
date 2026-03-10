@@ -675,13 +675,16 @@ def check_bull_filter(mode: str = 'adx_dmi') -> tuple:
         return True, {'status': 'ERROR', 'error': str(e)}
 
 
-def check_bear_filter(enabled: bool = True) -> tuple:
-    """Check if BTC is in a bear market (death cross).
-    Bear = BTC close < SMA(200) AND SMA(50) < SMA(200).
+def check_bear_filter(mode: str = 'off') -> tuple:
+    """Check if BTC is in a bear market using specified filter mode.
+    Modes: 'death_cross' (SMA50<SMA200 + close<SMA200), 'off' (always False)
     Returns (is_bear, details_dict).
     """
-    if not enabled:
+    # Handle legacy bool arg: True → death_cross, False → off
+    if mode is False or mode == 'off':
         return False, {'status': 'DISABLED'}
+    if mode is True:
+        mode = 'death_cross'
 
     try:
         url = f"{COINBASE_API}/products/BTC-USD/candles"
