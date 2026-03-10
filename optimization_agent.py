@@ -1233,7 +1233,81 @@ If you believe current params are optimal: {{"proposed_changes": {{}}, "rational
     return best_config, round_history
 
 
-def run_intensive_ualgo(max_rounds=20):
+def run_ualgo_filter_sweep():
+    """Sweep all bull/bear filter combinations for UAlgo, then optimize the best combo.
+
+    Tests 49 combinations (7 bull x 7 bear filters) at default UAlgo params.
+    Reports full + OOS metrics for each, then kicks off intensive optimization
+    on the winning combo.
+    """
+    tradesavvy_backend = os.path.join(os.path.dirname(__file__), '..', 'tradesavvy', 'backend')
+    if tradesavvy_backend not in sys.path:
+        sys.path.insert(0, tradesavvy_backend)
+    from backtest_ualgo_engine import run_backtest
+
+    BULL_FILTERS = ['off', 'sma200', 'golden_cross', 'adx_dmi', 'supertrend', 'sar', 'adx_sma200']
+    BEAR_FILTERS = ['off', 'death_cross', 'sma200', 'adx_dmi', 'supertrend', 'sar', 'adx_sma200']
+
+    logger.info("=== UALGO FILTER SWEEP: 49 combinations ===")
+    send_telegram("🔬 <b>UAlgo Filter Sweep Started</b>\n49 bull/bear filter combinations")
+
+    results = []
+    keys = ["total_return", "profit_factor", "win_rate", "max_drawdown", "total_trades", "sharpe_ratio"]
+
+    for bi, bull in enumerate(BULL_FILTERS):
+        for bei, bear in enumerate(BEAR_FILTERS):
+            combo_num = bi * len(BEAR_FILTERS) + bei + 1
+            logger.info(f"[{combo_num}/49] bull={bull}, bear={bear}")
+            try:
+                params = {"mode": "combined", "period": "full",
+                          "bull_filter": bull, "bear_filter": bear,
+                          "long_leverage": 1.0, "short_leverage": 1.0}
+                full_res = run_backtest({**params, "period": "full"})
+                oos_res = run_backtest({**params, "period": "test"})
+                full_m = {k: full_res.get(k) for k in keys}
+                oos_m = {k: oos_res.get(k) for k in keys}
+                results.append({
+                    "bull": bull, "bear": bear,
+                    "full": full_m, "oos": oos_m,
+                })
+                logger.info(f"  Full: {full_m['total_return']:+.1f}% PF {full_m['profit_factor']:.2f} WR {full_m['win_rate']:.1f}% DD {full_m['max_drawdown']:.1f}% ({full_m['total_trades']} trades)")
+                logger.info(f"  OOS:  {oos_m['total_return']:+.1f}% PF {oos_m['profit_factor']:.2f} WR {oos_m['win_rate']:.1f}% DD {oos_m['max_drawdown']:.1f}% ({oos_m['total_trades']} trades)")
+            except Exception as e:
+                logger.error(f"  ERROR: {e}")
+                results.append({"bull": bull, "bear": bear, "full": None, "oos": None, "error": str(e)})
+
+    # Rank by composite score: OOS return (primary), full PF (secondary), low DD (tertiary)
+    valid = [r for r in results if r.get("full") and r.get("oos") and r["full"]["total_trades"] >= 10]
+    valid.sort(key=lambda r: (
+        r["oos"]["total_return"],
+        r["full"]["profit_factor"],
+        -r["full"]["max_drawdown"],
+    ), reverse=True)
+
+    # Report top 10
+    logger.info(f"\n{'='*70}")
+    logger.info("UALGO FILTER SWEEP RESULTS — Top 10")
+    logger.info(f"{'='*70}")
+    report = "🔬 <b>UAlgo Filter Sweep Complete</b>\n\n<b>Top 10 Combos:</b>\n"
+    for i, r in enumerate(valid[:10]):
+        line = (f"#{i+1} bull={r['bull']}, bear={r['bear']}: "
+                f"Full {r['full']['total_return']:+.1f}% PF {r['full']['profit_factor']:.2f} "
+                f"({r['full']['total_trades']}t, DD {r['full']['max_drawdown']:.1f}%) | "
+                f"OOS {r['oos']['total_return']:+.1f}% PF {r['oos']['profit_factor']:.2f} "
+                f"({r['oos']['total_trades']}t, DD {r['oos']['max_drawdown']:.1f}%)")
+        logger.info(line)
+        report += f"{line}\n"
+
+    if valid:
+        best = valid[0]
+        report += f"\n🏆 <b>Winner: bull={best['bull']}, bear={best['bear']}</b>"
+        logger.info(f"\nWinner: bull={best['bull']}, bear={best['bear']}")
+    send_telegram(report)
+
+    return valid
+
+
+def run_intensive_ualgo(max_rounds=20, bull_filter="off", bear_filter="death_cross"):
     """Run intensive optimization on UAlgo backtest engine.
 
     Same pattern as Donchian intensive: AI proposes → backtest full + OOS → auto-apply if both improve.
@@ -1244,8 +1318,8 @@ def run_intensive_ualgo(max_rounds=20):
         sys.path.insert(0, tradesavvy_backend)
     from backtest_ualgo_engine import run_backtest
 
-    logger.info(f"=== UALGO INTENSIVE OPTIMIZATION: up to {max_rounds} rounds ===")
-    send_telegram(f"🔬 <b>UAlgo Intensive Optimization Started</b>\nMax rounds: {max_rounds}")
+    logger.info(f"=== UALGO INTENSIVE OPTIMIZATION: up to {max_rounds} rounds (bull={bull_filter}, bear={bear_filter}) ===")
+    send_telegram(f"🔬 <b>UAlgo Intensive Optimization Started</b>\nMax rounds: {max_rounds}\nFilters: bull={bull_filter}, bear={bear_filter}")
 
     # UAlgo defaults as starting config
     from backtest_ualgo_engine import UALGO_DEFAULTS
@@ -1256,7 +1330,7 @@ def run_intensive_ualgo(max_rounds=20):
 
     def _run_full_and_oos(config_overrides=None):
         params = {"mode": "combined", "period": "full",
-                  "bull_filter": "off", "bear_filter": "death_cross",
+                  "bull_filter": bull_filter, "bear_filter": bear_filter,
                   "long_leverage": 1.0, "short_leverage": 1.0}
         # Apply accumulated best config (closure over best_config)
         for k in UALGO_CONFIG_RANGES:
@@ -1318,7 +1392,7 @@ Exit: ATR-Fibonacci partial TPs (1.618/2.618/3.618 * ATR) + opposing signal + ma
 ## Round {round_num}/{max_rounds}
 - {"Focus on high-impact params: supertrend_multiplier, sl_atr_mult, RSI/CMO thresholds" if round_num <= 5 else "Try TP fractions, max_hold_days, flip_window, indicator periods" if round_num <= 12 else "Fine-tune combinations not yet tested"}
 - Auto-applied if both full AND OOS improve. No human review.
-- Bull filter OFF, bear filter death_cross — do NOT change these.
+- Bull filter={bull_filter}, bear filter={bear_filter} — do NOT change these.
 
 ## Allowed Ranges (propose SINGLE scalar values, NOT lists)
 {json.dumps(UALGO_CONFIG_RANGES, indent=2)}
@@ -1432,6 +1506,14 @@ def main():
                         help="Run intensive Donchian backtest optimization (default: 10 rounds)")
     parser.add_argument("--intensive-ualgo", type=int, nargs="?", const=20, metavar="ROUNDS",
                         help="Run intensive UAlgo backtest optimization (default: 20 rounds)")
+    parser.add_argument("--ualgo-sweep", action="store_true",
+                        help="Run UAlgo filter sweep (49 combos) then intensive optimization on best")
+    parser.add_argument("--ualgo-sweep-only", action="store_true",
+                        help="Run UAlgo filter sweep only (no optimization after)")
+    parser.add_argument("--bull-filter", type=str, default="off",
+                        help="Bull filter for UAlgo intensive (default: off)")
+    parser.add_argument("--bear-filter", type=str, default="death_cross",
+                        help="Bear filter for UAlgo intensive (default: death_cross)")
     args = parser.parse_args()
 
     if not db:
@@ -1443,9 +1525,19 @@ def main():
         run_intensive_optimization(max_rounds=args.intensive)
         return
 
+    if args.ualgo_sweep or args.ualgo_sweep_only:
+        logger.info("UAlgo filter sweep mode")
+        ranked = run_ualgo_filter_sweep()
+        if ranked and not args.ualgo_sweep_only:
+            best = ranked[0]
+            logger.info(f"Starting intensive optimization with best filters: bull={best['bull']}, bear={best['bear']}")
+            rounds = args.intensive_ualgo if args.intensive_ualgo else 20
+            run_intensive_ualgo(max_rounds=rounds, bull_filter=best['bull'], bear_filter=best['bear'])
+        return
+
     if args.intensive_ualgo:
-        logger.info(f"UAlgo intensive optimization mode: {args.intensive_ualgo} rounds")
-        run_intensive_ualgo(max_rounds=args.intensive_ualgo)
+        logger.info(f"UAlgo intensive optimization mode: {args.intensive_ualgo} rounds (bull={args.bull_filter}, bear={args.bear_filter})")
+        run_intensive_ualgo(max_rounds=args.intensive_ualgo, bull_filter=args.bull_filter, bear_filter=args.bear_filter)
         return
 
     if args.now:
