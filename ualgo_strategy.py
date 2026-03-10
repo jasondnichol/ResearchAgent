@@ -611,30 +611,49 @@ def check_bull_filter(mode: str = 'adx_dmi') -> tuple:
                 plus_dm[i] = up if (up > down and up > 0) else 0
                 minus_dm[i] = down if (down > up and down > 0) else 0
 
-            # Wilder smoothing
-            atr_sum = np.sum(tr[1:period+1])
-            pdm_sum = np.sum(plus_dm[1:period+1])
-            mdm_sum = np.sum(minus_dm[1:period+1])
+            # Wilder smoothing for ATR, +DM, -DM
+            atr_s = np.zeros(n)
+            pdm_s = np.zeros(n)
+            mdm_s = np.zeros(n)
+            atr_s[period] = np.sum(tr[1:period+1])
+            pdm_s[period] = np.sum(plus_dm[1:period+1])
+            mdm_s[period] = np.sum(minus_dm[1:period+1])
             for i in range(period + 1, n):
-                atr_sum = atr_sum - atr_sum / period + tr[i]
-                pdm_sum = pdm_sum - pdm_sum / period + plus_dm[i]
-                mdm_sum = mdm_sum - mdm_sum / period + minus_dm[i]
+                atr_s[i] = atr_s[i-1] - atr_s[i-1] / period + tr[i]
+                pdm_s[i] = pdm_s[i-1] - pdm_s[i-1] / period + plus_dm[i]
+                mdm_s[i] = mdm_s[i-1] - mdm_s[i-1] / period + minus_dm[i]
 
-            plus_di = 100 * pdm_sum / atr_sum if atr_sum > 0 else 0
-            minus_di = 100 * mdm_sum / atr_sum if atr_sum > 0 else 0
-            dx = abs(plus_di - minus_di) / (plus_di + minus_di) * 100 if (plus_di + minus_di) > 0 else 0
+            # +DI, -DI, DX arrays
+            plus_di_arr = np.zeros(n)
+            minus_di_arr = np.zeros(n)
+            dx_arr = np.zeros(n)
+            for i in range(period, n):
+                if atr_s[i] > 0:
+                    plus_di_arr[i] = 100 * pdm_s[i] / atr_s[i]
+                    minus_di_arr[i] = 100 * mdm_s[i] / atr_s[i]
+                di_sum = plus_di_arr[i] + minus_di_arr[i]
+                dx_arr[i] = 100 * abs(plus_di_arr[i] - minus_di_arr[i]) / di_sum if di_sum > 0 else 0
 
-            # ADX is smoothed DX — approximate with latest DX for live check
-            adx = dx  # single-point approximation (sufficient for live filter)
-            is_bull = plus_di > minus_di and adx >= 25
+            # ADX = Wilder-smoothed DX (starts at 2*period)
+            adx_arr = np.zeros(n)
+            adx_start = 2 * period
+            if adx_start < n:
+                adx_arr[adx_start] = np.mean(dx_arr[period:adx_start+1])
+                for i in range(adx_start + 1, n):
+                    adx_arr[i] = (adx_arr[i-1] * (period - 1) + dx_arr[i]) / period
+
+            adx_val = float(adx_arr[-1])
+            pdi_val = float(plus_di_arr[-1])
+            mdi_val = float(minus_di_arr[-1])
+            is_bull = pdi_val > mdi_val and adx_val >= 25
 
             details = {
                 'status': 'BULL' if is_bull else 'NOT_BULL',
                 'mode': 'adx_dmi',
                 'btc_close': btc_close,
-                'adx': round(adx, 2),
-                'plus_di': round(plus_di, 2),
-                'minus_di': round(minus_di, 2),
+                'adx': round(adx_val, 2),
+                'plus_di': round(pdi_val, 2),
+                'minus_di': round(mdi_val, 2),
             }
             return is_bull, details
 
