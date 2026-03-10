@@ -147,11 +147,13 @@ class UAlgoUserBot:
 
         self.logger.info("[UALGO] Loaded remote config from Supabase")
 
-        # Mode toggles — support both legacy bool and new string modes
-        bull_cfg = config.get("bull_filter_mode", config.get("bull_filter_enabled", 'adx_dmi'))
-        self.bull_filter_mode = bull_cfg if isinstance(bull_cfg, str) else ('adx_dmi' if bull_cfg else 'off')
-        bear_cfg = config.get("bear_filter_mode", config.get("bear_filter_enabled", 'off'))
-        self.bear_filter_mode = bear_cfg if isinstance(bear_cfg, str) else ('death_cross' if bear_cfg else 'off')
+        # Mode toggles — new string modes take priority, ignore legacy bool fields
+        if "bull_filter_mode" in config:
+            self.bull_filter_mode = config["bull_filter_mode"]
+        # else: keep code default (adx_dmi)
+        if "bear_filter_mode" in config:
+            self.bear_filter_mode = config["bear_filter_mode"]
+        # else: keep code default (off)
         self.short_enabled = config.get("short_enabled", DEFAULT_SHORT_ENABLED)
         self.futures_long_enabled = config.get("futures_long_enabled", DEFAULT_FUTURES_LONG_ENABLED)
         self.futures_long_leverage = min(float(config.get("futures_long_leverage", DEFAULT_FUTURES_LONG_LEVERAGE)), 3.0)
