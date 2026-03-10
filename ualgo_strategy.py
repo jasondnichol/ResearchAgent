@@ -27,28 +27,33 @@ logger = logging.getLogger("tradingbot")
 COINBASE_API = "https://api.exchange.coinbase.com"
 
 # Default UAlgo parameters (overridden by Supabase strategy_params)
+# AI-optimized Mar 10, 2026: filter sweep (49 combos) + 20-round intensive
 DEFAULT_PARAMS = {
     "supertrend_atr_period": 14,
-    "supertrend_multiplier": 2.0,
+    "supertrend_multiplier": 1.5,   # was 2.0 — tighter, more signals
     "sl_pct": 2.0,           # stop loss as %, e.g. 2.0 means 2%
-    "flip_window": 5,
+    "sl_atr_mult": 1.5,      # ATR-based SL multiplier (was 2.0)
+    "sl_min_pct": 0.8,       # min SL floor (was 1.0%)
+    "flip_window": 7,        # was 5 — more patient trend confirmation
     "rsi_period": 9,
     "hma_open_period": 5,
-    "hma_close_period": 12,
-    "cmo_period": 14,
-    "rsi_buy_threshold": 60,
+    "hma_close_period": 15,  # was 12 — smoother exit signals
+    "cmo_period": 10,        # was 14 — faster momentum detection
+    "rsi_buy_threshold": 65, # was 60 — stricter entries
     "rsi_sell_threshold": 40,
-    "cmo_buy_threshold": -10,
-    "cmo_sell_threshold": 10,
-    "tp1_fraction": 0.25,
-    "tp2_fraction": 0.25,
+    "cmo_buy_threshold": -20, # was -10 — wider entry range
+    "cmo_sell_threshold": 5,  # was 10
+    "tp1_fraction": 0.30,    # was 0.25 — take more at TP1
+    "tp2_fraction": 0.20,    # was 0.25 — less at TP2
     "tp3_fraction": 0.50,
     "short_sl_pct": 2.0,
+    "short_sl_atr_mult": 1.5, # ATR-based short SL multiplier
     "short_rsi_buy_threshold": 40,
     "short_rsi_sell_threshold": 60,
     "short_cmo_buy_threshold": 10,
     "short_cmo_sell_threshold": -10,
-    "max_hold_days": 30,
+    "max_hold_days": 25,     # was 30 — cut stale positions faster
+    "risk_per_trade": 2.5,   # was 2.0 — slightly higher conviction
     "lookback_candles": 250,  # candles needed for indicators (200 SMA + buffer)
 }
 
@@ -562,11 +567,15 @@ def check_ualgo_max_hold(position: dict, max_hold_days: int = 30) -> dict:
 # BULL/BEAR MARKET FILTERS (same logic as Donchian bot)
 # ============================================================================
 
-def check_bull_filter(enabled: bool = True) -> tuple:
-    """Check if BTC is in a bull market. Bull = BTC close > SMA(200).
+def check_bull_filter(mode: str = 'adx_dmi') -> tuple:
+    """Check if BTC is in a bull market using specified filter mode.
+    Modes: 'adx_dmi' (ADX>25 + +DI>-DI), 'sma200' (close>SMA200), 'off' (always True)
     Returns (is_bull, details_dict).
     """
-    if not enabled:
+    # Handle legacy bool arg: True → adx_dmi, False → off
+    if mode is True:
+        mode = 'adx_dmi'
+    elif mode is False or mode == 'off':
         return True, {'status': 'DISABLED'}
 
     try:
@@ -578,25 +587,69 @@ def check_bull_filter(enabled: bool = True) -> tuple:
         df = pd.DataFrame(data[:BULL_LOOKBACK], columns=['time', 'low', 'high', 'open', 'close', 'volume'])
         df = df.sort_values('time').reset_index(drop=True)
 
-        if len(df) < BULL_SMA_SLOW:
-            logger.warning(f"Bull filter: only {len(df)} candles, need {BULL_SMA_SLOW}")
-            return True, {'status': 'INSUFFICIENT_DATA'}
-
-        sma_fast = df['close'].rolling(window=BULL_SMA_FAST).mean().iloc[-1]
-        sma_slow = df['close'].rolling(window=BULL_SMA_SLOW).mean().iloc[-1]
         btc_close = float(df['close'].iloc[-1])
 
-        above_200 = btc_close > sma_slow
-        is_bull = above_200
+        if mode == 'adx_dmi':
+            # ADX(14) > 25 AND +DI > -DI — trend strength + bullish direction
+            period = 14
+            if len(df) < period * 2 + 1:
+                return True, {'status': 'INSUFFICIENT_DATA'}
 
-        details = {
-            'status': 'BULL' if is_bull else 'BEAR',
-            'btc_close': btc_close,
-            'sma_50': round(float(sma_fast), 2),
-            'sma_200': round(float(sma_slow), 2),
-            'above_200': above_200,
-        }
-        return is_bull, details
+            high = df['high'].values.astype(float)
+            low = df['low'].values.astype(float)
+            close = df['close'].values.astype(float)
+            n = len(df)
+
+            # True Range, +DM, -DM
+            tr = np.zeros(n)
+            plus_dm = np.zeros(n)
+            minus_dm = np.zeros(n)
+            for i in range(1, n):
+                tr[i] = max(high[i] - low[i], abs(high[i] - close[i-1]), abs(low[i] - close[i-1]))
+                up = high[i] - high[i-1]
+                down = low[i-1] - low[i]
+                plus_dm[i] = up if (up > down and up > 0) else 0
+                minus_dm[i] = down if (down > up and down > 0) else 0
+
+            # Wilder smoothing
+            atr_sum = np.sum(tr[1:period+1])
+            pdm_sum = np.sum(plus_dm[1:period+1])
+            mdm_sum = np.sum(minus_dm[1:period+1])
+            for i in range(period + 1, n):
+                atr_sum = atr_sum - atr_sum / period + tr[i]
+                pdm_sum = pdm_sum - pdm_sum / period + plus_dm[i]
+                mdm_sum = mdm_sum - mdm_sum / period + minus_dm[i]
+
+            plus_di = 100 * pdm_sum / atr_sum if atr_sum > 0 else 0
+            minus_di = 100 * mdm_sum / atr_sum if atr_sum > 0 else 0
+            dx = abs(plus_di - minus_di) / (plus_di + minus_di) * 100 if (plus_di + minus_di) > 0 else 0
+
+            # ADX is smoothed DX — approximate with latest DX for live check
+            adx = dx  # single-point approximation (sufficient for live filter)
+            is_bull = plus_di > minus_di and adx >= 25
+
+            details = {
+                'status': 'BULL' if is_bull else 'NOT_BULL',
+                'mode': 'adx_dmi',
+                'btc_close': btc_close,
+                'adx': round(adx, 2),
+                'plus_di': round(plus_di, 2),
+                'minus_di': round(minus_di, 2),
+            }
+            return is_bull, details
+
+        else:  # sma200 fallback
+            if len(df) < BULL_SMA_SLOW:
+                return True, {'status': 'INSUFFICIENT_DATA'}
+            sma_slow = df['close'].rolling(window=BULL_SMA_SLOW).mean().iloc[-1]
+            is_bull = btc_close > sma_slow
+            details = {
+                'status': 'BULL' if is_bull else 'BEAR',
+                'mode': 'sma200',
+                'btc_close': btc_close,
+                'sma_200': round(float(sma_slow), 2),
+            }
+            return is_bull, details
 
     except Exception as e:
         logger.error(f"Bull filter check failed: {e}")

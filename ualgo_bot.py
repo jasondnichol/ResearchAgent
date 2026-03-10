@@ -40,7 +40,7 @@ from supabase_sync import SupabaseSync
 # ============================================================================
 
 DEFAULT_MAX_POSITIONS = 4
-DEFAULT_RISK_PER_TRADE_PCT = 2.0
+DEFAULT_RISK_PER_TRADE_PCT = 2.5   # AI-optimized Mar 10 (was 2.0)
 DEFAULT_STARTING_CAPITAL = 10000.0
 DEFAULT_EMERGENCY_STOP_PCT = 15.0
 
@@ -93,9 +93,9 @@ class UAlgoUserBot:
         self.starting_capital = DEFAULT_STARTING_CAPITAL
         self.emergency_stop_pct = DEFAULT_EMERGENCY_STOP_PCT
 
-        # Mode toggles
-        self.bull_filter_enabled = True
-        self.bear_filter_enabled = True
+        # Mode toggles — AI-optimized filter combo (Mar 10, 2026)
+        self.bull_filter_mode = 'adx_dmi'   # ADX>25 + +DI>-DI (was sma200)
+        self.bear_filter_mode = 'off'       # disabled (was death_cross)
         self.short_enabled = DEFAULT_SHORT_ENABLED
         self.futures_long_enabled = DEFAULT_FUTURES_LONG_ENABLED
         self.futures_long_leverage = DEFAULT_FUTURES_LONG_LEVERAGE
@@ -147,9 +147,11 @@ class UAlgoUserBot:
 
         self.logger.info("[UALGO] Loaded remote config from Supabase")
 
-        # Mode toggles
-        self.bull_filter_enabled = config.get("bull_filter_enabled", True)
-        self.bear_filter_enabled = config.get("bear_filter_enabled", True)
+        # Mode toggles — support both legacy bool and new string modes
+        bull_cfg = config.get("bull_filter_mode", config.get("bull_filter_enabled", 'adx_dmi'))
+        self.bull_filter_mode = bull_cfg if isinstance(bull_cfg, str) else ('adx_dmi' if bull_cfg else 'off')
+        bear_cfg = config.get("bear_filter_mode", config.get("bear_filter_enabled", 'off'))
+        self.bear_filter_mode = bear_cfg if isinstance(bear_cfg, str) else ('death_cross' if bear_cfg else 'off')
         self.short_enabled = config.get("short_enabled", DEFAULT_SHORT_ENABLED)
         self.futures_long_enabled = config.get("futures_long_enabled", DEFAULT_FUTURES_LONG_ENABLED)
         self.futures_long_leverage = min(float(config.get("futures_long_leverage", DEFAULT_FUTURES_LONG_LEVERAGE)), 3.0)
@@ -191,9 +193,9 @@ class UAlgoUserBot:
             f"{len(self.futures_long_coin_universe)} FL, "
             f"{len(self.short_coin_universe)} short coins, "
             f"risk={self.risk_per_trade_pct}%, max_pos={self.max_positions}, "
-            f"bull={'ON' if self.bull_filter_enabled else 'OFF'}, "
+            f"bull={self.bull_filter_mode}, "
             f"short={'ON' if self.short_enabled else 'OFF'} "
-            f"(bear={'ON' if self.bear_filter_enabled else 'OFF'}), "
+            f"(bear={self.bear_filter_mode}), "
             f"FL={'ON' if self.futures_long_enabled else 'OFF'} "
             f"(lev={self.futures_long_leverage}x)"
         )
@@ -712,18 +714,16 @@ class UAlgoUserBot:
         self._check_daily_exits(prices)
 
         # ===== REGIME FILTERS =====
-        is_bull, bull_details = check_bull_filter(self.bull_filter_enabled)
-        is_bear, bear_details = check_bear_filter(self.bear_filter_enabled)
+        is_bull, bull_details = check_bull_filter(self.bull_filter_mode)
+        is_bear, bear_details = check_bear_filter(self.bear_filter_mode)
 
         bull_status = bull_details.get('status', 'UNKNOWN')
         bear_status = bear_details.get('status', 'UNKNOWN')
 
-        if bull_details.get('btc_close'):
-            print(f"\nBull filter: {bull_status} | BTC: ${bull_details['btc_close']:,.2f} | "
-                  f"SMA200: ${bull_details['sma_200']:,.2f}")
-        else:
-            print(f"\nBull filter: {bull_status}")
-        print(f"Bear filter: {bear_status}")
+        btc_str = f" | BTC: ${bull_details['btc_close']:,.2f}" if bull_details.get('btc_close') else ""
+        adx_str = f" | ADX: {bull_details.get('adx', 0):.1f} +DI: {bull_details.get('plus_di', 0):.1f} -DI: {bull_details.get('minus_di', 0):.1f}" if bull_details.get('adx') else ""
+        print(f"\nBull filter ({self.bull_filter_mode}): {bull_status}{btc_str}{adx_str}")
+        print(f"Bear filter ({self.bear_filter_mode}): {bear_status}")
 
         # ===== FUTURES LONG ENTRIES (gated by bull + FL enabled) =====
         if is_bull and self.futures_long_enabled:
@@ -1045,10 +1045,10 @@ class UAlgoUserBot:
         )
 
         # Check filters on startup
-        is_bull, bull_details = check_bull_filter(self.bull_filter_enabled)
-        is_bear, bear_details = check_bear_filter(self.bear_filter_enabled)
-        print(f"Bull filter: {bull_details.get('status', 'UNKNOWN')}")
-        print(f"Bear filter: {bear_details.get('status', 'UNKNOWN')}")
+        is_bull, bull_details = check_bull_filter(self.bull_filter_mode)
+        is_bear, bear_details = check_bear_filter(self.bear_filter_mode)
+        print(f"Bull filter ({self.bull_filter_mode}): {bull_details.get('status', 'UNKNOWN')}")
+        print(f"Bear filter ({self.bear_filter_mode}): {bear_details.get('status', 'UNKNOWN')}")
 
         last_daily_check = None
         last_summary = None
